@@ -13,7 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.0.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.0.0", features = [] }
+tauri = { version = "2.0.0", features = ["unstable"] }
 tauri-plugin-dialog = "2.0.0"
 tauri-plugin-fs = "2.0.0"
 tauri-plugin-shell = "2.0.0"
@@ -28,6 +28,10 @@ trash = "5"
 # RAG / Vector Storage
 rusqlite = { version = "0.32", features = ["bundled"] }
 bincode = "1.3"
+
+# HTTP client for Bilibili API
+reqwest = { version = "0.12", features = ["json"] }
+flate2 = "1.0"
 
 [profile.dev]
 incremental = true

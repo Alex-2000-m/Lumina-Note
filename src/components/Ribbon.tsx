@@ -7,11 +7,12 @@ import {
   Settings,
   Sun,
   Moon,
+  Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Ribbon() {
-  const { isDarkMode, toggleTheme } = useUIStore();
+  const { isDarkMode, toggleTheme, videoNoteOpen, toggleVideoNote } = useUIStore();
   const { tabs, activeTabIndex, openGraphTab, switchTab } = useFileStore();
   
   // Check active tab type
@@ -65,6 +66,20 @@ export function Ribbon() {
           title="全局搜索 (Ctrl+Shift+F)"
         >
           <Search size={20} />
+        </button>
+
+        {/* Video Note */}
+        <button
+          onClick={toggleVideoNote}
+          className={cn(
+            "w-9 h-9 rounded-lg flex items-center justify-center transition-all",
+            videoNoteOpen
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+          title="视频笔记"
+        >
+          <Video size={20} />
         </button>
       </div>
 

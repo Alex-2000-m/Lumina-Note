@@ -1,5 +1,8 @@
 use crate::error::AppError;
 use crate::fs::{self, FileEntry};
+use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewBuilder, LogicalPosition, LogicalSize, Position, Size};
+use tauri::WebviewUrl;
+use std::io::Read;
 
 /// Read file content
 #[tauri::command]
@@ -73,4 +76,292 @@ pub async fn show_in_explorer(path: String) -> Result<(), AppError> {
     }
     
     Ok(())
+}
+
+/// 在主窗口内创建内嵌 WebView
+#[tauri::command]
+pub async fn create_embedded_webview(
+    app: AppHandle, 
+    url: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64
+) -> Result<(), AppError> {
+    // 获取主窗口（通过 Manager::windows()）
+    let windows = app.windows();
+    let main_window = windows.get("main")
+        .ok_or_else(|| AppError::InvalidPath("Main window not found".into()))?;
+    
+    // 如果已存在内嵌 webview，先关闭
+    if let Some(webview) = app.get_webview("video-webview") {
+        let _ = webview.close();
+    }
+    
+    // 创建 WebView Builder
+    let webview_builder = WebviewBuilder::new(
+        "video-webview",
+        WebviewUrl::External(url.parse().map_err(|_| AppError::InvalidPath("Invalid URL".into()))?)
+    );
+    
+    // 创建内嵌 WebView
+    let _webview = main_window.add_child(
+        webview_builder,
+        Position::Logical(LogicalPosition::new(x, y)),
+        Size::Logical(LogicalSize::new(width, height)),
+    ).map_err(|e| AppError::InvalidPath(e.to_string()))?;
+    
+    println!("[EmbeddedWebview] 创建成功: {} at ({}, {}) size {}x{}", url, x, y, width, height);
+    
+    Ok(())
+}
+
+/// 更新内嵌 WebView 的位置和大小
+#[tauri::command]
+pub async fn update_webview_bounds(
+    app: AppHandle,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64
+) -> Result<(), AppError> {
+    if let Some(webview) = app.get_webview("video-webview") {
+        webview.set_position(Position::Logical(LogicalPosition::new(x, y)))
+            .map_err(|e| AppError::InvalidPath(e.to_string()))?;
+        webview.set_size(Size::Logical(LogicalSize::new(width, height)))
+            .map_err(|e| AppError::InvalidPath(e.to_string()))?;
+    }
+    Ok(())
+}
+
+/// 关闭内嵌 WebView
+#[tauri::command]
+pub async fn close_embedded_webview(app: AppHandle) -> Result<(), AppError> {
+    if let Some(webview) = app.get_webview("video-webview") {
+        webview.close().map_err(|e| AppError::InvalidPath(e.to_string()))?;
+    }
+    Ok(())
+}
+
+/// 获取 B站视频 CID
+#[tauri::command]
+pub async fn get_bilibili_cid(bvid: String) -> Result<Option<u64>, AppError> {
+    let url = format!("https://api.bilibili.com/x/web-interface/view?bvid={}", bvid);
+    
+    let client = reqwest::Client::new();
+    let resp = client.get(&url)
+        .header("User-Agent", "Mozilla/5.0")
+        .send()
+        .await
+        .map_err(|e| AppError::InvalidPath(e.to_string()))?;
+    
+    let json: serde_json::Value = resp.json()
+        .await
+        .map_err(|e| AppError::InvalidPath(e.to_string()))?;
+    
+    if json["code"].as_i64() == Some(0) {
+        if let Some(cid) = json["data"]["cid"].as_u64() {
+            return Ok(Some(cid));
+        }
+    }
+    
+    Ok(None)
+}
+
+/// 获取 B站弹幕列表
+#[tauri::command]
+pub async fn get_bilibili_danmaku(cid: u64) -> Result<Vec<DanmakuItem>, AppError> {
+    let url = format!("https://api.bilibili.com/x/v1/dm/list.so?oid={}", cid);
+    
+    let client = reqwest::Client::new();
+    let resp = client.get(&url)
+        .header("User-Agent", "Mozilla/5.0")
+        .send()
+        .await
+        .map_err(|e| AppError::InvalidPath(e.to_string()))?;
+    
+    let bytes = resp.bytes()
+        .await
+        .map_err(|e| AppError::InvalidPath(e.to_string()))?;
+    
+    // 尝试解压 deflate
+    let text = match flate2::read::DeflateDecoder::new(&bytes[..]).bytes().collect::<Result<Vec<u8>, _>>() {
+        Ok(decompressed) => String::from_utf8_lossy(&decompressed).to_string(),
+        Err(_) => String::from_utf8_lossy(&bytes).to_string(),
+    };
+    
+    // 使用正则解析 XML 中的 <d> 标签
+    let mut danmakus = Vec::new();
+    
+    // 查找所有 <d p="...">...</d> 模式
+    let mut pos = 0;
+    while let Some(start) = text[pos..].find("<d p=\"") {
+        let abs_start = pos + start;
+        
+        // 找到 p 属性的结束引号
+        if let Some(attr_end) = text[abs_start + 6..].find("\"") {
+            let attr = &text[abs_start + 6..abs_start + 6 + attr_end];
+            let parts: Vec<&str> = attr.split(',').collect();
+            
+            // 找到 > 和 </d>
+            let content_start = abs_start + 6 + attr_end + 2; // 跳过 ">
+            if let Some(content_end) = text[content_start..].find("</d>") {
+                let content = &text[content_start..content_start + content_end];
+                
+                if parts.len() >= 5 {
+                    danmakus.push(DanmakuItem {
+                        time: parts[0].parse().unwrap_or(0.0),
+                        content: content.to_string(),
+                        timestamp: parts[4].parse().unwrap_or(0),
+                    });
+                }
+                
+                pos = content_start + content_end + 4; // 跳过 </d>
+            } else {
+                pos = abs_start + 1;
+            }
+        } else {
+            pos = abs_start + 1;
+        }
+    }
+    
+    // 按时间排序
+    danmakus.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+    
+    println!("[Danmaku] 解析到 {} 条弹幕", danmakus.len());
+    
+    Ok(danmakus)
+}
+
+#[derive(serde::Serialize)]
+pub struct DanmakuItem {
+    pub time: f64,
+    pub content: String,
+    pub timestamp: u64,
+}
+
+/// 在内嵌 WebView 中执行 JS 来跳转视频时间
+#[tauri::command]
+pub async fn seek_video_time(app: AppHandle, seconds: f64) -> Result<(), AppError> {
+    if let Some(webview) = app.get_webview("video-webview") {
+        // B站播放器的 video 元素
+        let js = format!(
+            r#"
+            (function() {{
+                const video = document.querySelector('video');
+                if (video) {{
+                    video.currentTime = {};
+                    console.log('[LuminaNote] Seek to:', {});
+                }}
+            }})();
+            "#,
+            seconds, seconds
+        );
+        webview.eval(&js).map_err(|e| AppError::InvalidPath(e.to_string()))?;
+    }
+    Ok(())
+}
+
+/// 打开视频播放窗口（独立窗口备用）
+#[tauri::command]
+pub async fn open_video_window(app: AppHandle, url: String) -> Result<(), AppError> {
+    // 如果窗口已存在，先关闭
+    if let Some(window) = app.get_webview_window("video-player") {
+        let _ = window.close();
+    }
+    
+    // 创建新的 WebView 窗口
+    let _window = WebviewWindowBuilder::new(
+        &app,
+        "video-player",
+        WebviewUrl::External(url.parse().map_err(|_| AppError::InvalidPath("Invalid URL".into()))?)
+    )
+    .title("视频播放器 - Lumina Note")
+    .inner_size(960.0, 640.0)
+    .min_inner_size(640.0, 480.0)
+    .center()
+    .build()
+    .map_err(|e| AppError::InvalidPath(e.to_string()))?;
+    
+    println!("[VideoWindow] 窗口已创建: {}", url);
+    
+    Ok(())
+}
+
+/// 关闭视频播放窗口
+#[tauri::command]
+pub async fn close_video_window(app: AppHandle) -> Result<(), AppError> {
+    if let Some(window) = app.get_webview_window("video-player") {
+        window.close().map_err(|e| AppError::InvalidPath(e.to_string()))?;
+    }
+    Ok(())
+}
+
+/// 获取视频当前时间（轮询方式）
+/// 返回 JSON 字符串: {"currentTime": 123.45, "duration": 600.0, "paused": false} 或 null
+#[tauri::command]
+pub async fn get_video_time(app: AppHandle) -> Result<Option<String>, AppError> {
+    if let Some(window) = app.get_webview_window("video-player") {
+        // 使用 eval 执行 JS 并获取返回值
+        let script = r#"
+            (function() {
+                const video = document.querySelector('video');
+                if (video) {
+                    return JSON.stringify({
+                        currentTime: video.currentTime,
+                        duration: video.duration || 0,
+                        paused: video.paused
+                    });
+                }
+                return null;
+            })();
+        "#;
+        
+        match window.eval(script) {
+            Ok(_) => {
+                // eval 不直接返回值，需要用其他方式
+                // 使用 webview 的 evaluate_script 或轮询 title 等
+                // 暂时返回 None，让前端用其他方式处理
+                Ok(None)
+            }
+            Err(e) => {
+                Err(AppError::InvalidPath(e.to_string()))
+            }
+        }
+    } else {
+        Ok(None)
+    }
+}
+
+/// 读取视频时间（从窗口标题获取，由 initialization_script 更新）
+#[tauri::command]
+pub async fn sync_video_time(app: AppHandle) -> Result<Option<VideoTimeInfo>, AppError> {
+    if let Some(window) = app.get_webview_window("video-player") {
+        // 直接读取标题（由 initialization_script 定期更新）
+        if let Ok(title) = window.title() {
+            if title.starts_with("MX:") {
+                let parts: Vec<&str> = title.trim_start_matches("MX:").split(':').collect();
+                if parts.len() >= 3 {
+                    // 时间以毫秒存储，转回秒
+                    let current_time = parts[0].parse::<f64>().unwrap_or(0.0) / 1000.0;
+                    let duration = parts[1].parse::<f64>().unwrap_or(0.0) / 1000.0;
+                    let paused = parts[2] == "1";
+                    
+                    return Ok(Some(VideoTimeInfo {
+                        current_time,
+                        duration,
+                        paused,
+                    }));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+#[derive(serde::Serialize)]
+pub struct VideoTimeInfo {
+    pub current_time: f64,
+    pub duration: f64,
+    pub paused: bool,
 }

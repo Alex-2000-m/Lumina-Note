@@ -11,12 +11,13 @@ import { useFileStore } from "@/stores/useFileStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useNoteIndexStore } from "@/stores/useNoteIndexStore";
 import { useRAGStore } from "@/stores/useRAGStore";
-import { FolderOpen, Sparkles } from "lucide-react";
+import { FolderOpen, Sparkles, PanelLeftClose, PanelRightClose, PanelLeft, PanelRight } from "lucide-react";
 import { CommandPalette, PaletteMode } from "@/components/CommandPalette";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { TabBar } from "@/components/TabBar";
 import { DiffView } from "@/components/DiffView";
 import { AIFloatingBall } from "@/components/AIFloatingBall";
+import { VideoNoteView } from "@/components/VideoNoteView";
 import { useAIStore } from "@/stores/useAIStore";
 import { saveFile } from "@/lib/tauri";
 
@@ -119,6 +120,8 @@ function App() {
     toggleLeftSidebar,
     toggleRightSidebar,
     splitView,
+    videoNoteOpen,
+    setVideoNoteOpen,
   } = useUIStore();
 
   // Build note index when file tree changes
@@ -279,18 +282,37 @@ function App() {
         <Sidebar />
       </div>
 
-      {/* Left Resize Handle */}
-      {leftSidebarOpen && (
-        <ResizeHandle
-          direction="left"
-          onResize={handleLeftResize}
-          onDoubleClick={toggleLeftSidebar}
-        />
-      )}
+      {/* Left Resize Handle + Collapse Button */}
+      <div className="relative flex-shrink-0">
+        {leftSidebarOpen && (
+          <ResizeHandle
+            direction="left"
+            onResize={handleLeftResize}
+            onDoubleClick={toggleLeftSidebar}
+          />
+        )}
+        {/* Left Collapse Button */}
+        <button
+          onClick={toggleLeftSidebar}
+          className={`absolute top-1/2 -translate-y-1/2 z-10 p-1 rounded-md bg-muted/80 hover:bg-accent border border-border shadow-sm transition-all ${
+            leftSidebarOpen ? "left-0 -translate-x-1/2" : "left-1"
+          }`}
+          title={leftSidebarOpen ? "收起左侧栏" : "展开左侧栏"}
+        >
+          {leftSidebarOpen ? (
+            <PanelLeftClose className="w-4 h-4 text-muted-foreground" />
+          ) : (
+            <PanelLeft className="w-4 h-4 text-muted-foreground" />
+          )}
+        </button>
+      </div>
 
-      {/* Main content - switches between Editor, Graph, Split, and Diff based on state */}
+      {/* Main content - switches between Editor, Graph, Split, Diff, and VideoNote based on state */}
       <main className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {pendingDiff ? (
+        {videoNoteOpen ? (
+          // 视频笔记模式
+          <VideoNoteView onClose={() => setVideoNoteOpen(false)} />
+        ) : pendingDiff ? (
           // Show diff view when there's a pending AI edit
           <DiffViewWrapper />
         ) : splitView && currentFile ? (
@@ -308,14 +330,30 @@ function App() {
         )}
       </main>
 
-      {/* Right Resize Handle */}
-      {rightSidebarOpen && (
-        <ResizeHandle
-          direction="right"
-          onResize={handleRightResize}
-          onDoubleClick={toggleRightSidebar}
-        />
-      )}
+      {/* Right Resize Handle + Collapse Button */}
+      <div className="relative flex-shrink-0">
+        {rightSidebarOpen && (
+          <ResizeHandle
+            direction="right"
+            onResize={handleRightResize}
+            onDoubleClick={toggleRightSidebar}
+          />
+        )}
+        {/* Right Collapse Button */}
+        <button
+          onClick={toggleRightSidebar}
+          className={`absolute top-1/2 -translate-y-1/2 z-10 p-1 rounded-md bg-muted/80 hover:bg-accent border border-border shadow-sm transition-all ${
+            rightSidebarOpen ? "right-0 translate-x-1/2" : "right-1"
+          }`}
+          title={rightSidebarOpen ? "收起右侧栏" : "展开右侧栏"}
+        >
+          {rightSidebarOpen ? (
+            <PanelRightClose className="w-4 h-4 text-muted-foreground" />
+          ) : (
+            <PanelRight className="w-4 h-4 text-muted-foreground" />
+          )}
+        </button>
+      </div>
 
       {/* Right Sidebar */}
       <div

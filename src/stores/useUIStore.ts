@@ -59,6 +59,11 @@ interface UIState {
   splitDirection: "horizontal" | "vertical";
   toggleSplitView: () => void;
   setSplitDirection: (dir: "horizontal" | "vertical") => void;
+
+  // Video note view
+  videoNoteOpen: boolean;
+  setVideoNoteOpen: (open: boolean) => void;
+  toggleVideoNote: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -126,6 +131,11 @@ export const useUIStore = create<UIState>()(
       splitDirection: "horizontal",
       toggleSplitView: () => set((state) => ({ splitView: !state.splitView })),
       setSplitDirection: (dir) => set({ splitDirection: dir }),
+
+      // Video note
+      videoNoteOpen: false,
+      setVideoNoteOpen: (open) => set({ videoNoteOpen: open }),
+      toggleVideoNote: () => set((state) => ({ videoNoteOpen: !state.videoNoteOpen })),
     }),
     {
       name: "neurone-ui",

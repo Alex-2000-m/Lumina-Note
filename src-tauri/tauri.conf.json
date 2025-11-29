@@ -26,7 +26,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; img-src 'self' data: blob: https://*.hdslb.com https://*.bilibili.com; media-src 'self' blob: https://*.bilibili.com; frame-src https://player.bilibili.com https://*.bilibili.com; connect-src 'self' https://*.bilibili.com https://api.bilibili.com"
     }
   },
   "plugins": {
