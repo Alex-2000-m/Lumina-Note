@@ -43,6 +43,12 @@ body.resizing * {
   padding: 0;
 }
 
+/* 允许拖拽的元素 */
+[draggable="true"] {
+  -webkit-user-drag: element;
+  user-select: none;
+}
+
 html,
 body,
 #root {

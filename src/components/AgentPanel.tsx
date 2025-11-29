@@ -10,8 +10,9 @@ import { useFileStore } from "@/stores/useFileStore";
 import { MODES, getModeList } from "@/agent/modes";
 import { AgentModeSlug, Message } from "@/agent/types";
 import { parseMarkdown } from "@/lib/markdown";
+import { ChatInput, type ReferencedFile } from "./ChatInput";
+import { readFile } from "@/lib/tauri";
 import {
-  Send,
   Square,
   Check,
   X,
@@ -52,26 +53,35 @@ export function AgentPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 发送消息
-  const handleSend = async () => {
-    if (!input.trim() || status === "running") return;
+  // 发送消息（支持引用文件）
+  const handleSendWithFiles = async (message: string, referencedFiles: ReferencedFile[]) => {
+    if ((!message.trim() && referencedFiles.length === 0) || status === "running") return;
 
-    const message = input.trim();
     setInput("");
 
-    await startTask(message, {
+    // 读取引用文件的内容
+    let additionalContext = "";
+    for (const file of referencedFiles) {
+      if (!file.isFolder) {
+        try {
+          const content = await readFile(file.path);
+          additionalContext += `\n\n--- 引用文件: ${file.name} ---\n${content}`;
+        } catch (e) {
+          console.error(`Failed to read file ${file.path}:`, e);
+        }
+      }
+    }
+
+    // 如果有引用文件，将内容附加到消息中
+    const fullMessage = additionalContext 
+      ? `${message}\n\n[用户引用的文件内容]${additionalContext}`
+      : message;
+
+    await startTask(fullMessage, {
       workspacePath: vaultPath || "",
       activeNote: currentFile || undefined,
       activeNoteContent: currentFile ? currentContent : undefined,
     });
-  };
-
-  // 按键处理
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
   };
 
   return (
@@ -159,42 +169,33 @@ export function AgentPanel() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* 输入区域 - Chat 样式 */}
+        {/* 输入区域 - 支持 @ 引用和拖拽 */}
         <div className="p-3 border-t border-border">
-          <div className="bg-muted/30 border border-border rounded-lg p-2 focus-within:ring-1 focus-within:ring-primary/50 transition-all">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="输入任务指令..."
-              className="w-full bg-transparent resize-none outline-none text-sm min-h-[60px] max-h-32 text-foreground placeholder-muted-foreground"
-              disabled={status === "running" || status === "waiting_approval"}
-            />
-            <div className="flex justify-between items-center mt-2">
-              <span className="text-xs text-muted-foreground">
-                {MODES[mode].name}
-              </span>
-              <div className="flex gap-2">
-                {status === "running" ? (
-                  <button
-                    onClick={abort}
-                    className="bg-red-500 hover:bg-red-600 text-white rounded p-1.5 transition-colors"
-                    title="停止"
-                  >
-                    <Square size={14} />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSend}
-                    disabled={!input.trim() || status === "waiting_approval"}
-                    className="bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded p-1.5 transition-colors"
-                  >
-                    <Send size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
+          <div className="mb-2 flex justify-between items-center">
+            <span className="text-xs text-muted-foreground">
+              {MODES[mode].name}
+            </span>
+            {status === "running" && (
+              <button
+                onClick={abort}
+                className="bg-red-500 hover:bg-red-600 text-white rounded px-2 py-1 text-xs transition-colors flex items-center gap-1"
+                title="停止"
+              >
+                <Square size={12} />
+                停止
+              </button>
+            )}
           </div>
+          <ChatInput
+            value={input}
+            onChange={setInput}
+            onSend={handleSendWithFiles}
+            isLoading={status === "running"}
+            isStreaming={status === "running"}
+            onStop={abort}
+            placeholder="输入任务指令... (@ 引用文件)"
+            rows={3}
+          />
         </div>
     </div>
   );

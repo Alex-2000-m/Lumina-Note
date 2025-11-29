@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   exists as tauriExists,
-  mkdir,
   readDir as tauriReadDir,
   rename as tauriRename,
 } from "@tauri-apps/plugin-fs";
@@ -80,9 +79,10 @@ export async function exists(path: string): Promise<boolean> {
  */
 export async function createDir(
   path: string,
-  options?: { recursive?: boolean }
+  _options?: { recursive?: boolean }
 ): Promise<void> {
-  return mkdir(path, { recursive: options?.recursive ?? false });
+  // 使用自定义 Rust 命令而非 tauri-plugin-fs，避免 scope 限制
+  return invoke("create_dir", { path });
 }
 
 /**

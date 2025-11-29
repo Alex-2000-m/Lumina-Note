@@ -14,13 +14,16 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             commands::read_file,
             commands::save_file,
             commands::list_directory,
             commands::create_file,
+            commands::create_dir,
             commands::delete_file,
             commands::rename_file,
+            commands::show_in_explorer,
             // Vector DB commands
             vector_db::init_vector_db,
             vector_db::upsert_vector_chunks,

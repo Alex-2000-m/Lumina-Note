@@ -13,12 +13,13 @@ import {
   Settings, 
   Trash2, 
   Dock,
-  Send,
   Loader2,
 } from "lucide-react";
 import { AgentPanel } from "./AgentPanel";
 import { ConversationList } from "./ConversationList";
+import { ChatInput, type ReferencedFile } from "./ChatInput";
 import { PROVIDER_REGISTRY, type LLMProviderType } from "@/services/llm";
+import { readFile } from "@/lib/tauri";
 
 interface AIFloatingPanelProps {
   ballPosition: { x: number; y: number };
@@ -297,39 +298,16 @@ export function AIFloatingPanel({ ballPosition, onDock }: AIFloatingPanelProps) 
             
             {/* Input */}
             <div className="p-2 border-t border-border">
-              <div className="flex gap-2">
-                <textarea
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !isStreaming) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  placeholder="输入消息..."
-                  disabled={isStreaming}
-                  className="flex-1 bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm resize-none outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
-                  rows={2}
-                />
-                {isStreaming ? (
-                  <button
-                    onClick={stopStreaming}
-                    className="self-end bg-red-500 hover:bg-red-600 text-white rounded-lg p-2 transition-colors"
-                    title="停止生成"
-                  >
-                    <span className="block w-4 h-4 bg-white rounded-sm" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSend}
-                    disabled={!inputValue.trim() || isLoading}
-                    className="self-end bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg p-2 transition-colors"
-                  >
-                    <Send size={16} />
-                  </button>
-                )}
-              </div>
+              <ChatInput
+                value={inputValue}
+                onChange={setInputValue}
+                onSend={handleSendWithFiles}
+                isLoading={isLoading}
+                isStreaming={isStreaming}
+                onStop={stopStreaming}
+                placeholder="输入消息... (@ 引用文件)"
+                rows={2}
+              />
             </div>
           </div>
         )}
@@ -339,17 +317,33 @@ export function AIFloatingPanel({ ballPosition, onDock }: AIFloatingPanelProps) 
     </div>
   );
 
-  // 发送消息（流式）
-  function handleSend() {
-    if (!inputValue.trim() || isLoading || isStreaming) return;
+  // 发送消息（流式）- 支持引用文件
+  async function handleSendWithFiles(message: string, referencedFiles: ReferencedFile[]) {
+    if ((!message.trim() && referencedFiles.length === 0) || isLoading || isStreaming) return;
     
-    const fileContext = currentFile ? {
-      path: currentFile,
-      name: currentFile.split(/[/\\]/).pop() || "",
-      content: currentContent,
-    } : undefined;
+    // 构建文件上下文
+    let contextContent = "";
     
-    sendMessageStream(inputValue.trim(), fileContext);
+    // 添加引用文件的内容
+    for (const file of referencedFiles) {
+      if (!file.isFolder) {
+        try {
+          const content = await readFile(file.path);
+          contextContent += `\n\n--- 引用文件: ${file.name} ---\n${content}`;
+        } catch (e) {
+          console.error(`Failed to read file ${file.path}:`, e);
+        }
+      }
+    }
+    
+    // 如果没有引用文件，使用当前文件作为上下文
+    const fileContext = referencedFiles.length > 0 
+      ? { path: "", name: "引用文件", content: contextContent.trim() }
+      : currentFile 
+        ? { path: currentFile, name: currentFile.split(/[/\\]/).pop() || "", content: currentContent }
+        : undefined;
+    
+    sendMessageStream(message.trim(), fileContext);
     setInputValue("");
   }
 }

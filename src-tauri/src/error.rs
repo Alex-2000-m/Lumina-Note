@@ -17,6 +17,9 @@ pub enum AppError {
 
     #[error("Database error: {0}")]
     Database(String),
+
+    #[error("Trash error: {0}")]
+    Trash(#[from] trash::Error),
 }
 
 impl Serialize for AppError {

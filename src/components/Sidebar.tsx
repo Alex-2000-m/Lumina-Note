@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import { useFileStore } from "@/stores/useFileStore";
 import { useUIStore } from "@/stores/useUIStore";
-import { FileEntry, deleteFile, renameFile, createFile } from "@/lib/tauri";
+import { FileEntry, deleteFile, renameFile, createFile, createDir, exists } from "@/lib/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import { cn, getFileName } from "@/lib/utils";
 import { ContextMenu, MenuItem, menuItems } from "./ContextMenu";
 import {
@@ -16,7 +17,8 @@ import {
   BrainCircuit,
   Sun,
   Moon,
-  Plus,
+  FilePlus,
+  FolderPlus,
 } from "lucide-react";
 
 interface ContextMenuState {
@@ -26,6 +28,12 @@ interface ContextMenuState {
   isDirectory: boolean;
 }
 
+// 新建模式状态
+interface CreatingState {
+  type: "file" | "folder";
+  parentPath: string;
+}
+
 export function Sidebar() {
   const { vaultPath, fileTree, currentFile, openFile, refreshFileTree, isLoadingTree, closeFile } =
     useFileStore();
@@ -33,9 +41,16 @@ export function Sidebar() {
   
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  // Rename state
+  // 选中状态（用于确定新建位置）
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  // 新建模式（先命名后创建）
+  const [creating, setCreating] = useState<CreatingState | null>(null);
+  const [createValue, setCreateValue] = useState("");
+  // 重命名状态（针对已存在的文件）
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  // 展开的文件夹路径集合
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 
   // Handle context menu
   const handleContextMenu = useCallback((e: React.MouseEvent, entry: FileEntry) => {
@@ -72,7 +87,9 @@ export function Sidebar() {
   // Handle rename
   const handleStartRename = useCallback((entry: FileEntry) => {
     setRenamingPath(entry.path);
-    setRenameValue(entry.name.replace(/\.md$/, ""));
+    // 文件：去掉 .md，文件夹：原样
+    const baseName = entry.is_dir ? entry.name : entry.name.replace(/\.md$/, "");
+    setRenameValue(baseName);
   }, []);
 
   const handleRename = useCallback(async () => {
@@ -80,10 +97,14 @@ export function Sidebar() {
       setRenamingPath(null);
       return;
     }
-    
+
+    const trimmed = renameValue.trim();
+    const isDir = !renamingPath.toLowerCase().endsWith(".md");
     const separator = renamingPath.includes("\\") ? "\\" : "/";
     const parentDir = renamingPath.substring(0, renamingPath.lastIndexOf(separator));
-    const newPath = `${parentDir}${separator}${renameValue.trim()}.md`;
+    const newPath = isDir
+      ? `${parentDir}${separator}${trimmed}`
+      : `${parentDir}${separator}${trimmed}.md`;
     
     if (newPath === renamingPath) {
       setRenamingPath(null);
@@ -112,36 +133,150 @@ export function Sidebar() {
     }
   }, []);
 
-  // Handle show in explorer - placeholder for now
+  // Handle show in explorer - 在资源管理器中显示并选中文件
   const handleShowInExplorer = useCallback(async (path: string) => {
-    // For now, just copy the path. Full shell integration requires plugin setup.
     try {
-      await navigator.clipboard.writeText(path);
-      alert(`路径已复制：${path}\n\n请在资源管理器中粘贴打开`);
+      await invoke("show_in_explorer", { path });
     } catch (error) {
-      console.error("Failed:", error);
+      console.error("Show in explorer failed:", error);
+      // 降级：复制路径
+      try {
+        await navigator.clipboard.writeText(path);
+        alert(`打开失败，路径已复制：${path}`);
+      } catch {
+        alert(`打开失败：${error}`);
+      }
     }
   }, []);
 
-  // Handle new file
-  const handleNewFile = useCallback(async (parentPath?: string) => {
-    const basePath = parentPath || vaultPath;
-    if (!basePath) return;
+  // 解析用于创建新文件/文件夹的基础路径（VS Code 风格）：
+  // 1) 显式传入的 parentPath（来自右键菜单）
+  // 2) 选中的文件夹，或选中文件的父目录
+  // 3) 当前打开文件所在目录
+  // 4) fallback 到 vault 根目录
+  const getBasePath = useCallback(
+    (parentPath?: string): string | null => {
+      // 1. 显式 parentPath（右键 "在此新建"）
+      if (parentPath) return parentPath;
+
+      const getSep = (p: string) => (p.includes("\\") ? "\\" : "/");
+      const getParentDir = (p: string) => {
+        const sep = getSep(p);
+        const lastIndex = p.lastIndexOf(sep);
+        return lastIndex > 0 ? p.substring(0, lastIndex) : null;
+      };
+
+      // 2. 选中项：如果是文件夹直接用，如果是文件取父目录
+      if (selectedPath) {
+        // 判断选中的是文件还是文件夹（简单判断：有 .md 后缀是文件）
+        if (selectedPath.toLowerCase().endsWith(".md")) {
+          return getParentDir(selectedPath);
+        }
+        return selectedPath;
+      }
+
+      // 3. 当前打开文件所在目录
+      if (currentFile) {
+        return getParentDir(currentFile);
+      }
+
+      // 4. 退回 vault 根目录
+      return vaultPath;
+    },
+    [selectedPath, currentFile, vaultPath]
+  );
+
+  // 展开指定路径的所有父文件夹
+  const expandToPath = useCallback((targetPath: string) => {
+    const sep = targetPath.includes("\\") ? "\\" : "/";
+    const parts = targetPath.split(sep);
+    const pathsToExpand: string[] = [];
     
-    const separator = basePath.includes("\\") ? "\\" : "/";
-    const fileName = prompt("输入文件名（不含扩展名）：");
-    if (!fileName?.trim()) return;
-    
-    const newPath = `${basePath}${separator}${fileName.trim()}.md`;
-    try {
-      await createFile(newPath);
-      refreshFileTree();
-      openFile(newPath);
-    } catch (error) {
-      console.error("Create file failed:", error);
-      alert("创建文件失败");
+    // 构建所有父路径
+    for (let i = 1; i < parts.length; i++) {
+      pathsToExpand.push(parts.slice(0, i).join(sep));
     }
-  }, [vaultPath, refreshFileTree, openFile]);
+    
+    setExpandedPaths(prev => {
+      const next = new Set(prev);
+      pathsToExpand.forEach(p => next.add(p));
+      return next;
+    });
+  }, []);
+
+  // Handle new file - VS Code 风格：先显示输入框，输入名称后再创建
+  const handleNewFile = useCallback((parentPath?: string) => {
+    const basePath = getBasePath(parentPath);
+    if (!basePath) return;
+
+    // 展开父文件夹
+    expandToPath(basePath);
+    
+    // 进入新建模式
+    setCreating({ type: "file", parentPath: basePath });
+    setCreateValue("");
+  }, [getBasePath, expandToPath]);
+
+  // Handle new folder - VS Code 风格
+  const handleNewFolder = useCallback((parentPath?: string) => {
+    const basePath = getBasePath(parentPath);
+    if (!basePath) return;
+
+    // 展开父文件夹
+    expandToPath(basePath);
+    
+    // 进入新建模式
+    setCreating({ type: "folder", parentPath: basePath });
+    setCreateValue("");
+  }, [getBasePath, expandToPath]);
+
+  // 确认创建（用户按 Enter）
+  const handleCreateSubmit = useCallback(async () => {
+    if (!creating || !createValue.trim()) {
+      setCreating(null);
+      return;
+    }
+
+    const trimmed = createValue.trim();
+    const sep = creating.parentPath.includes("\\") ? "\\" : "/";
+    
+    // 构建完整路径
+    const fullPath = creating.type === "file"
+      ? `${creating.parentPath}${sep}${trimmed}${trimmed.endsWith(".md") ? "" : ".md"}`
+      : `${creating.parentPath}${sep}${trimmed}`;
+
+    // 检查是否已存在
+    try {
+      if (await exists(fullPath)) {
+        alert(`${creating.type === "file" ? "文件" : "文件夹"}"${trimmed}"已存在`);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (creating.type === "file") {
+        await createFile(fullPath);
+        await refreshFileTree();
+        openFile(fullPath);
+      } else {
+        await createDir(fullPath);
+        await refreshFileTree();
+      }
+    } catch (error) {
+      console.error("Create failed:", error);
+      alert(`创建${creating.type === "file" ? "文件" : "文件夹"}失败`);
+    }
+
+    setCreating(null);
+  }, [creating, createValue, refreshFileTree, openFile]);
+
+  // 取消创建
+  const handleCreateCancel = useCallback(() => {
+    setCreating(null);
+    setCreateValue("");
+  }, []);
 
   // Build context menu items
   const getContextMenuItems = useCallback((entry: FileEntry): MenuItem[] => {
@@ -149,19 +284,37 @@ export function Sidebar() {
     
     if (entry.is_dir) {
       items.push(menuItems.newFile(() => handleNewFile(entry.path)));
+      items.push(menuItems.newFolder(() => handleNewFolder(entry.path)));
     }
     
     items.push(menuItems.copyPath(() => handleCopyPath(entry.path)));
     items.push(menuItems.showInExplorer(() => handleShowInExplorer(entry.path)));
-    
-    if (!entry.is_dir) {
-      items.push(menuItems.rename(() => handleStartRename(entry)));
-    }
-    
+    items.push(menuItems.rename(() => handleStartRename(entry)));
     items.push(menuItems.delete(() => handleDelete(entry)));
     
     return items;
-  }, [handleNewFile, handleCopyPath, handleShowInExplorer, handleStartRename, handleDelete]);
+  }, [handleNewFile, handleNewFolder, handleCopyPath, handleShowInExplorer, handleStartRename, handleDelete]);
+
+  // 切换文件夹展开状态
+  const toggleExpanded = useCallback((path: string) => {
+    setExpandedPaths(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  // 处理选中（单击高亮）
+  const handleSelect = useCallback((entry: FileEntry) => {
+    setSelectedPath(entry.path);
+    if (!entry.is_dir) {
+      openFile(entry.path);
+    }
+  }, [openFile]);
 
   return (
     <aside className="w-full h-full border-r border-border flex flex-col bg-muted/30 dark:bg-[#252526] transition-colors duration-300">
@@ -174,7 +327,14 @@ export function Sidebar() {
             className="p-1 hover:bg-accent rounded transition-colors"
             title="新建文件"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <FilePlus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => handleNewFolder()}
+            className="p-1 hover:bg-accent rounded transition-colors"
+            title="新建文件夹"
+          >
+            <FolderPlus className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={refreshFileTree}
@@ -207,7 +367,18 @@ export function Sidebar() {
 
       {/* File Tree */}
       <div className="flex-1 overflow-auto py-2">
-        {fileTree.length === 0 ? (
+        {/* 根目录新建输入框 */}
+        {creating && creating.parentPath === vaultPath && (
+          <CreateInputRow
+            type={creating.type}
+            value={createValue}
+            onChange={setCreateValue}
+            onSubmit={handleCreateSubmit}
+            onCancel={handleCreateCancel}
+            level={0}
+          />
+        )}
+        {fileTree.length === 0 && !creating ? (
           <div className="px-4 py-8 text-center text-muted-foreground text-sm">
             未找到 Markdown 文件
           </div>
@@ -217,7 +388,8 @@ export function Sidebar() {
               key={entry.path}
               entry={entry}
               currentFile={currentFile}
-              onSelect={openFile}
+              selectedPath={selectedPath}
+              onSelect={handleSelect}
               onContextMenu={handleContextMenu}
               level={0}
               renamingPath={renamingPath}
@@ -225,6 +397,13 @@ export function Sidebar() {
               setRenameValue={setRenameValue}
               onRenameSubmit={handleRename}
               onRenameCancel={() => setRenamingPath(null)}
+              expandedPaths={expandedPaths}
+              toggleExpanded={toggleExpanded}
+              creating={creating}
+              createValue={createValue}
+              setCreateValue={setCreateValue}
+              onCreateSubmit={handleCreateSubmit}
+              onCreateCancel={handleCreateCancel}
             />
           ))
         )}
@@ -268,10 +447,66 @@ export function Sidebar() {
   );
 }
 
+// 新建输入框组件
+interface CreateInputRowProps {
+  type: "file" | "folder";
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+  level: number;
+}
+
+function CreateInputRow({ type, value, onChange, onSubmit, onCancel, level }: CreateInputRowProps) {
+  const paddingLeft = 12 + level * 16 + 20;
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      onSubmit();
+    } else if (e.key === "Escape") {
+      onCancel();
+    }
+  };
+
+  return (
+    <div
+      className="flex items-center gap-1.5 py-1 px-1"
+      style={{ paddingLeft }}
+    >
+      {type === "folder" ? (
+        <Folder className="w-4 h-4 text-muted-foreground shrink-0" />
+      ) : (
+        <File className="w-4 h-4 text-muted-foreground shrink-0" />
+      )}
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => {
+          // 延迟一下，避免点击其他地方时立即触发
+          setTimeout(() => {
+            if (value.trim()) {
+              onSubmit();
+            } else {
+              onCancel();
+            }
+          }, 100);
+        }}
+        onKeyDown={handleKeyDown}
+        autoFocus
+        placeholder={type === "file" ? "文件名" : "文件夹名"}
+        className="flex-1 bg-background border border-primary rounded px-1.5 py-0.5 text-sm outline-none"
+      />
+      {type === "file" && <span className="text-muted-foreground text-sm">.md</span>}
+    </div>
+  );
+}
+
 interface FileTreeItemProps {
   entry: FileEntry;
   currentFile: string | null;
-  onSelect: (path: string) => void;
+  selectedPath: string | null;
+  onSelect: (entry: FileEntry) => void;
   onContextMenu: (e: React.MouseEvent, entry: FileEntry) => void;
   level: number;
   renamingPath: string | null;
@@ -279,11 +514,19 @@ interface FileTreeItemProps {
   setRenameValue: (value: string) => void;
   onRenameSubmit: () => void;
   onRenameCancel: () => void;
+  expandedPaths: Set<string>;
+  toggleExpanded: (path: string) => void;
+  creating: CreatingState | null;
+  createValue: string;
+  setCreateValue: (value: string) => void;
+  onCreateSubmit: () => void;
+  onCreateCancel: () => void;
 }
 
 function FileTreeItem({ 
   entry, 
-  currentFile, 
+  currentFile,
+  selectedPath,
   onSelect, 
   onContextMenu,
   level,
@@ -292,11 +535,22 @@ function FileTreeItem({
   setRenameValue,
   onRenameSubmit,
   onRenameCancel,
+  expandedPaths,
+  toggleExpanded,
+  creating,
+  createValue,
+  setCreateValue,
+  onCreateSubmit,
+  onCreateCancel,
 }: FileTreeItemProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const isExpanded = expandedPaths.has(entry.path);
   const isActive = currentFile === entry.path;
+  const isSelected = selectedPath === entry.path;
   const isRenaming = renamingPath === entry.path;
   const paddingLeft = 12 + level * 16;
+
+  // 是否在当前文件夹下新建
+  const isCreatingHere = creating && creating.parentPath === entry.path;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -307,12 +561,47 @@ function FileTreeItem({
   };
 
   if (entry.is_dir) {
+    // 文件夹重命名
+    if (isRenaming) {
+      return (
+        <div
+          className="flex items-center gap-1.5 py-1 px-1"
+          style={{ paddingLeft }}
+        >
+          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+          <Folder className="w-4 h-4 text-muted-foreground shrink-0" />
+          <input
+            type="text"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={onRenameSubmit}
+            onKeyDown={handleKeyDown}
+            autoFocus
+            className="flex-1 bg-background border border-primary rounded px-1.5 py-0.5 text-sm outline-none"
+          />
+        </div>
+      );
+    }
+
     return (
       <div>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            onSelect(entry);
+            toggleExpanded(entry.path);
+          }}
           onContextMenu={(e) => onContextMenu(e, entry)}
-          className="w-full flex items-center gap-1.5 py-1.5 hover:bg-accent transition-colors text-sm"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              toggleExpanded(entry.path);
+            }
+          }}
+          className={cn(
+            "w-full flex items-center gap-1.5 py-1.5 transition-colors text-sm cursor-pointer",
+            isSelected ? "bg-accent" : "hover:bg-accent"
+          )}
           style={{ paddingLeft }}
         >
           {isExpanded ? (
@@ -326,15 +615,27 @@ function FileTreeItem({
             <Folder className="w-4 h-4 text-muted-foreground shrink-0" />
           )}
           <span className="truncate">{entry.name}</span>
-        </button>
+        </div>
 
-        {isExpanded && entry.children && (
+        {isExpanded && (
           <div>
-            {entry.children.map((child) => (
+            {/* 在此文件夹内新建的输入框 */}
+            {isCreatingHere && (
+              <CreateInputRow
+                type={creating.type}
+                value={createValue}
+                onChange={setCreateValue}
+                onSubmit={onCreateSubmit}
+                onCancel={onCreateCancel}
+                level={level + 1}
+              />
+            )}
+            {entry.children?.map((child) => (
               <FileTreeItem
                 key={child.path}
                 entry={child}
                 currentFile={currentFile}
+                selectedPath={selectedPath}
                 onSelect={onSelect}
                 onContextMenu={onContextMenu}
                 level={level + 1}
@@ -343,6 +644,13 @@ function FileTreeItem({
                 setRenameValue={setRenameValue}
                 onRenameSubmit={onRenameSubmit}
                 onRenameCancel={onRenameCancel}
+                expandedPaths={expandedPaths}
+                toggleExpanded={toggleExpanded}
+                creating={creating}
+                createValue={createValue}
+                setCreateValue={setCreateValue}
+                onCreateSubmit={onCreateSubmit}
+                onCreateCancel={onCreateCancel}
               />
             ))}
           </div>
@@ -356,7 +664,7 @@ function FileTreeItem({
     return (
       <div
         className="flex items-center gap-1.5 py-1 px-1"
-        style={{ paddingLeft: paddingLeft + 16 }}
+        style={{ paddingLeft: paddingLeft + 20 }}
       >
         <File className="w-4 h-4 text-muted-foreground shrink-0" />
         <input
@@ -374,19 +682,24 @@ function FileTreeItem({
   }
 
   return (
-    <button
-      onClick={() => onSelect(entry.path)}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(entry)}
       onContextMenu={(e) => onContextMenu(e, entry)}
+      onKeyDown={(e) => e.key === "Enter" && onSelect(entry)}
       className={cn(
-        "w-full flex items-center gap-1.5 py-1.5 transition-colors text-sm",
+        "w-full flex items-center gap-1.5 py-1.5 transition-colors text-sm cursor-pointer",
         isActive
           ? "bg-primary/10 text-primary"
+          : isSelected
+          ? "bg-accent"
           : "hover:bg-accent"
       )}
       style={{ paddingLeft: paddingLeft + 20 }}
     >
       <File className="w-4 h-4 text-muted-foreground shrink-0" />
       <span className="truncate">{getFileName(entry.name)}</span>
-    </button>
+    </div>
   );
 }

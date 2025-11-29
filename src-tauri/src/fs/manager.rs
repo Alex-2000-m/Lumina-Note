@@ -105,18 +105,24 @@ pub fn create_new_file(path: &str) -> Result<(), AppError> {
     fs::write(path, "").map_err(AppError::from)
 }
 
-/// Delete a file or empty directory
+/// Delete a file or directory (move to trash/recycle bin)
 pub fn delete_entry(path: &str) -> Result<(), AppError> {
     let path = Path::new(path);
     if !path.exists() {
         return Err(AppError::FileNotFound(path.display().to_string()));
     }
-    if path.is_dir() {
-        fs::remove_dir_all(path)?;
-    } else {
-        fs::remove_file(path)?;
-    }
+    // 移动到回收站而非永久删除
+    trash::delete(path)?;
     Ok(())
+}
+
+/// Create a new directory
+pub fn create_new_dir(path: &str) -> Result<(), AppError> {
+    let path = Path::new(path);
+    if path.exists() {
+        return Err(AppError::FileExists(path.display().to_string()));
+    }
+    fs::create_dir_all(path).map_err(AppError::from)
 }
 
 /// Rename/move a file or directory
