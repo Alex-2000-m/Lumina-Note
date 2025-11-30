@@ -655,6 +655,9 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    // 右键点击不处理拖拽和节点点击（由 contextMenu 处理）
+    if (e.button === 2) return;
+    
     const { x, y } = getScreenPos(e);
     const worldPos = getWorldPos(x, y);
 
