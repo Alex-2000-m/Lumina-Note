@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { InteractiveLayer } from "./InteractiveLayer";
+import type { PDFElement } from "@/types/pdf";
 
 // 配置 PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -17,6 +19,13 @@ interface PDFCanvasProps {
   scale: number;
   onDocumentLoad?: (numPages: number) => void;
   onPageChange?: (page: number) => void;
+  // 交互层相关
+  showInteractiveLayer?: boolean;
+  elements?: PDFElement[];
+  selectedElementIds?: string[];
+  hoveredElementId?: string | null;
+  onElementHover?: (elementId: string | null) => void;
+  onElementClick?: (element: PDFElement, isMultiSelect: boolean) => void;
   className?: string;
 }
 
@@ -27,10 +36,17 @@ export function PDFCanvas({
   scale,
   onDocumentLoad,
   onPageChange,
+  showInteractiveLayer = false,
+  elements = [],
+  selectedElementIds = [],
+  hoveredElementId = null,
+  onElementHover,
+  onElementClick,
   className,
 }: PDFCanvasProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 处理文档加载
@@ -39,6 +55,12 @@ export function PDFCanvas({
     setError(null);
     onDocumentLoad?.(numPages);
   }, [onDocumentLoad]);
+
+  // 处理页面加载成功
+  const handlePageLoadSuccess = useCallback((page: any) => {
+    const viewport = page.getViewport({ scale: 1 });
+    setPageSize({ width: viewport.width, height: viewport.height });
+  }, []);
 
   // 处理加载错误
   const handleDocumentLoadError = useCallback((err: Error) => {
@@ -120,10 +142,11 @@ export function PDFCanvas({
         }
         className="flex flex-col items-center py-4"
       >
-        <div className="shadow-lg">
+        <div className="relative shadow-lg">
           <Page
             pageNumber={currentPage}
             scale={scale}
+            onLoadSuccess={handlePageLoadSuccess}
             loading={
               <div className="flex items-center justify-center py-10">
                 <Loader2 className="animate-spin" size={20} />
@@ -131,6 +154,21 @@ export function PDFCanvas({
             }
             className="bg-white"
           />
+          
+          {/* 交互层 */}
+          {showInteractiveLayer && pageSize && onElementHover && onElementClick && (
+            <InteractiveLayer
+              pageIndex={currentPage}
+              pageWidth={pageSize.width}
+              pageHeight={pageSize.height}
+              scale={scale}
+              elements={elements}
+              selectedElementIds={selectedElementIds}
+              hoveredElementId={hoveredElementId}
+              onElementHover={onElementHover}
+              onElementClick={onElementClick}
+            />
+          )}
         </div>
       </Document>
     </div>
