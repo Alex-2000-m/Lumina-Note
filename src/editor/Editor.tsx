@@ -165,15 +165,8 @@ export function Editor() {
     [save]
   );
 
-  if (isLoadingFile) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-muted-foreground">加载中...</div>
-      </div>
-    );
-  }
-
   // 打开文件时自动检测是否是视频笔记 Markdown，给出提示
+  // 注意：必须在 early return 之前，否则违反 React Hooks 规则
   const isVideoNoteFile = useMemo(() => {
     if (!currentContent) return false;
     // 简单检测 frontmatter 中是否包含 video_bvid 字段
@@ -182,6 +175,14 @@ export function Editor() {
     const hasVideoNoteHeading = /# \s*视频笔记/.test(currentContent);
     return hasFrontmatterBvid || hasVideoNoteHeading;
   }, [currentContent]);
+
+  if (isLoadingFile) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-muted-foreground">加载中...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background transition-colors duration-300">

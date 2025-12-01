@@ -4,7 +4,7 @@ import { PDFOutline } from "./PDFOutline";
 import { FileText, List } from "lucide-react";
 
 interface PDFSidebarProps {
-  filePath: string;
+  pdfData: Uint8Array | null;
   numPages: number;
   currentPage: number;
   onPageClick: (page: number) => void;
@@ -12,7 +12,7 @@ interface PDFSidebarProps {
 }
 
 export function PDFSidebar({
-  filePath,
+  pdfData,
   numPages,
   currentPage,
   onPageClick,
@@ -56,7 +56,7 @@ export function PDFSidebar({
       <div className="flex-1 overflow-hidden">
         {activeTab === "thumbnails" ? (
           <PDFThumbnails
-            filePath={filePath}
+            pdfData={pdfData}
             numPages={numPages}
             currentPage={currentPage}
             onPageClick={onPageClick}
@@ -64,7 +64,7 @@ export function PDFSidebar({
           />
         ) : (
           <PDFOutline
-            filePath={filePath}
+            pdfData={pdfData}
             onPageClick={onPageClick}
           />
         )}

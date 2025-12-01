@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Document, Page } from "react-pdf";
-import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PDFThumbnailsProps {
