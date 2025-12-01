@@ -534,12 +534,17 @@ export const useAIStore = create<AIState>()(
             ? `<thinking>\n${fullReasoning}\n</thinking>\n\n${fullContent}`
             : fullContent;
 
+          // Parse edit suggestions from content
+          const edits = parseEditSuggestions(finalContent);
+          console.log("[AI Stream] Parsed edits:", edits);
+
           set((state) => {
             const assistantMessage: Message = { role: "assistant", content: finalContent };
             const newMessages = [...state.messages, assistantMessage];
             const newTitle = generateTitleFromAssistantContent(finalContent, "新对话");
             return {
               messages: newMessages,
+              pendingEdits: edits.length > 0 ? edits : state.pendingEdits,
               isStreaming: false,
               streamingContent: "",
               streamingReasoning: "",
@@ -555,6 +560,32 @@ export const useAIStore = create<AIState>()(
               ),
             };
           });
+
+          // Auto-show diff after a short delay (to avoid render issues)
+          if (edits.length > 0 && filesToSend.length > 0) {
+            // Capture the data we need before setTimeout
+            const edit = edits[0];
+            const file = filesToSend.find(f => 
+              f.path?.toLowerCase().includes(edit.filePath.replace(/\.md$/, "").toLowerCase()) ||
+              f.name?.toLowerCase().includes(edit.filePath.replace(/\.md$/, "").toLowerCase())
+            ) || filesToSend[0];
+            
+            if (file && file.content && file.path) {
+              const modified = applyEdit(file.content, edit);
+              if (modified !== file.content) {
+                const diffData = {
+                  fileName: file.name,
+                  filePath: file.path,
+                  original: file.content,
+                  modified,
+                  description: edit.description,
+                };
+                setTimeout(() => {
+                  get().setPendingDiff(diffData);
+                }, 100);
+              }
+            }
+          }
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "发送消息失败",

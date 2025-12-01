@@ -99,7 +99,12 @@ export async function callLLM(
   options?: LLMOptions
 ): Promise<LLMResponse> {
   const provider = createProvider();
-  return provider.call(messages, options);
+  const config = getLLMConfig();
+  const finalOptions = {
+    ...options,
+    temperature: options?.temperature ?? config.temperature,
+  };
+  return provider.call(messages, finalOptions);
 }
 
 /**
@@ -111,11 +116,16 @@ export async function* callLLMStream(
   options?: LLMOptions
 ): LLMStream {
   const provider = createProvider();
+  const config = getLLMConfig();
+  const finalOptions = {
+    ...options,
+    temperature: options?.temperature ?? config.temperature,
+  };
   
   // 检查 Provider 是否支持流式
   if (!provider.stream) {
     // 降级：不支持流式的 Provider 一次性返回
-    const response = await provider.call(messages, options);
+    const response = await provider.call(messages, finalOptions);
     yield { type: "text", text: response.content };
     if (response.usage) {
       yield {
@@ -129,5 +139,5 @@ export async function* callLLMStream(
   }
   
   // 使用 Provider 的流式方法
-  yield* provider.stream(messages, options);
+  yield* provider.stream(messages, finalOptions);
 }

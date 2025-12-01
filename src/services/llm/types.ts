@@ -47,6 +47,7 @@ export interface LLMConfig {
   model: string;
   customModelId?: string;  // 当 model === "custom" 时使用的实际模型 ID
   baseUrl?: string;
+  temperature?: number;
 }
 
 // ============ LLM 调用参数 ============

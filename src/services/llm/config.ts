@@ -9,6 +9,7 @@ const DEFAULT_CONFIG: LLMConfig = {
   provider: "moonshot",
   apiKey: "",
   model: "moonshot-v1-8k",
+  temperature: 0.3,
 };
 
 let config: LLMConfig = { ...DEFAULT_CONFIG };

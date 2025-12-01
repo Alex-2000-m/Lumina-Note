@@ -235,7 +235,7 @@ export class AgentLoop {
         if (!approved) {
           this.stateManager.addMessage({
             role: "user",
-            content: `用户拒绝了工具调用: ${toolCall.name}。请尝试其他方式或询问用户需求。`,
+            content: `用户拒绝了工具调用: ${toolCall.name}。\n\n请使用 <thinking> 标签分析用户拒绝的原因（可能是操作危险、参数不正确或不符合用户意图），然后尝试其他方式或询问用户需求。`,
           });
           this.stateManager.setStatus("running");
           continue;
@@ -246,9 +246,16 @@ export class AgentLoop {
       const result = await this.executeTool(toolCall, context);
 
       // 将结果添加到消息
+      let resultMsg = formatToolResult(toolCall, result);
+      
+      // 如果执行失败，追加反思提示
+      if (!result.success) {
+        resultMsg += `\n\n❌ 系统拒绝执行：检测到工具调用错误。\n\n请立即反思：\n1. 工具名称是否正确？\n2. 参数格式是否符合 JSON 规范？\n3. 参数值是否有效？\n\n请在下一次回复中：\n1. 使用 <thinking> 标签分析错误原因\n2. 修正错误并重新调用`;
+      }
+
       this.stateManager.addMessage({
         role: "user",
-        content: formatToolResult(toolCall, result),
+        content: resultMsg,
       });
 
       this.stateManager.resetErrors();
@@ -384,7 +391,7 @@ export class AgentLoop {
         // 添加错误信息让 LLM 重试
         this.stateManager.addMessage({
           role: "user",
-          content: `发生错误: ${error.message}。请重试。`,
+          content: `❌ 系统错误: ${error.message}。\n\n请使用 <thinking> 标签分析错误原因，并尝试修复或使用替代方案。`,
         });
       }
     }
