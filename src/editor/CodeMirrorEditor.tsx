@@ -2,6 +2,9 @@ import { parseMarkdown } from "@/lib/markdown";
 import { useEffect, useRef, useImperativeHandle, forwardRef, useCallback } from "react";
 import { useFileStore } from "@/stores/useFileStore";
 import { useAIStore } from "@/stores/useAIStore";
+import { useSplitStore } from "@/stores/useSplitStore";
+import { useUIStore } from "@/stores/useUIStore";
+import { parseLuminaLink } from "@/lib/annotations";
 import { EditorState, StateField, StateEffect } from "@codemirror/state";
 import {
   EditorView,
@@ -846,7 +849,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
   const isExternalChange = useRef(false);
   const lastInternalContent = useRef<string>(content); // 跟踪编辑器内部的最新内容
   
-  const { openVideoNoteTab } = useFileStore();
+  const { openVideoNoteTab, openPDFTab } = useFileStore();
+  const { openSecondaryPdf } = useSplitStore();
+  const { setSplitView } = useUIStore();
   
   // 处理 B站链接点击
   const handleBilibiliLinkClick = useCallback((url: string) => {
@@ -854,6 +859,21 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       openVideoNoteTab(url);
     }
   }, [openVideoNoteTab]);
+  
+  // 处理 lumina:// PDF 链接点击
+  const handleLuminaLinkClick = useCallback((href: string, ctrlKey: boolean) => {
+    const parsed = parseLuminaLink(href);
+    if (parsed && parsed.file) {
+      if (ctrlKey) {
+        // Ctrl+Click: 分栏打开 PDF
+        setSplitView(true);
+        openSecondaryPdf(parsed.file, parsed.page || 1, parsed.id);
+      } else {
+        // 普通点击: 在主视图打开
+        openPDFTab(parsed.file);
+      }
+    }
+  }, [setSplitView, openSecondaryPdf, openPDFTab]);
 
   // 暴露滚动控制方法
   useImperativeHandle(ref, () => ({
@@ -971,12 +991,27 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       const view = viewRef.current;
       if (!view) return;
       
-      // Ctrl+Click 或 Cmd+Click
-      if (!(e.ctrlKey || e.metaKey)) return;
-      
-      // 方法1：检查点击的 DOM 元素是否是链接
       const target = e.target as HTMLElement;
       const linkElement = target.closest('a[href]');
+      
+      // lumina:// 链接支持普通点击和 Ctrl+Click
+      if (linkElement) {
+        const href = linkElement.getAttribute('href') || '';
+        
+        // 处理 lumina:// PDF 链接（普通点击打开主视图，Ctrl+Click 分栏）
+        if (href.startsWith('lumina://pdf')) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('[CodeMirror] 检测到 lumina 链接点击:', href);
+          handleLuminaLinkClick(href, e.ctrlKey || e.metaKey);
+          return;
+        }
+      }
+      
+      // 其他链接需要 Ctrl+Click
+      if (!(e.ctrlKey || e.metaKey)) return;
+      
+      // 处理 B站链接
       if (linkElement) {
         const href = linkElement.getAttribute('href') || '';
         if (href.includes('bilibili.com/video/') || href.includes('b23.tv')) {
@@ -1040,7 +1075,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       if (timer) clearTimeout(timer);
       if (currentCleanup) currentCleanup();
     };
-  }, [handleBilibiliLinkClick, isDark, livePreview]);
+  }, [handleBilibiliLinkClick, handleLuminaLinkClick, isDark, livePreview]);
   
   // 监听语音输入事件：灰色流式预览 + 在光标处插入文本
   useEffect(() => {
