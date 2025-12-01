@@ -15,6 +15,7 @@ import {
   Mic,
   MicOff,
   RefreshCw,
+  Square,
 } from "lucide-react";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { ChatInput } from "./ChatInput";
@@ -59,10 +60,12 @@ export function ChatPanel({ compact = false }: ChatPanelProps) {
   const { 
     messages, 
     isLoading, 
+    isStreaming,
     error, 
     referencedFiles,
     pendingEdits,
-    sendMessage,
+    sendMessageStream,
+    stopStreaming,
     retry,
     removeFileReference,
     clearPendingEdits,
@@ -80,7 +83,7 @@ export function ChatPanel({ compact = false }: ChatPanelProps) {
   // 滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isStreaming]);
 
   // 当前文件信息
   const currentFileInfo = useMemo(() => {
@@ -96,13 +99,13 @@ export function ChatPanel({ compact = false }: ChatPanelProps) {
   // Handle send message with referenced files
   const handleSendWithFiles = useCallback(async (message: string, files: ReferencedFile[]) => {
     if (!message.trim() && files.length === 0) return;
-    if (isLoading) return;
+    if (isLoading || isStreaming) return;
 
     const { displayMessage, fullMessage } = await processMessageWithFiles(message, files);
 
     setInputValue("");
-    await sendMessage(fullMessage, files.length === 0 ? (currentFileInfo || undefined) : undefined, displayMessage);
-  }, [isLoading, sendMessage, currentFileInfo]);
+    await sendMessageStream(fullMessage, files.length === 0 ? (currentFileInfo || undefined) : undefined, displayMessage);
+  }, [isLoading, isStreaming, sendMessageStream, currentFileInfo]);
 
   // Preview edit in diff view
   const handlePreviewEdit = useCallback((edit: EditSuggestion) => {
@@ -219,7 +222,7 @@ export function ChatPanel({ compact = false }: ChatPanelProps) {
         )}
 
         {/* Loading */}
-        {isLoading && (
+        {(isLoading || isStreaming) && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 size={14} className="animate-spin" />
             <span>思考中...</span>
@@ -234,7 +237,7 @@ export function ChatPanel({ compact = false }: ChatPanelProps) {
         )}
 
         {/* Retry button */}
-        {messages.length > 0 && messages.some(m => m.role === "assistant") && !isLoading && (
+        {messages.length > 0 && messages.some(m => m.role === "assistant") && !isLoading && !isStreaming && (
           <div className="flex justify-end">
             <button
               onClick={() => {
@@ -263,7 +266,7 @@ export function ChatPanel({ compact = false }: ChatPanelProps) {
             value={inputValue}
             onChange={setInputValue}
             onSend={handleSendWithFiles}
-            isLoading={isLoading}
+            isLoading={isLoading || isStreaming}
             placeholder="输入消息... (@ 引用文件)"
             rows={compact ? 2 : 2}
             hideSendButton={true}
@@ -293,13 +296,17 @@ export function ChatPanel({ compact = false }: ChatPanelProps) {
                 {isRecording ? <MicOff size={14} className="relative z-10" /> : <Mic size={14} />}
               </button>
               <button
-                onClick={() => handleSendWithFiles(inputValue, [])}
-                disabled={!inputValue.trim() || isLoading}
-                className="bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded p-1.5 transition-colors flex items-center justify-center"
-                title="发送"
+                onClick={() => (isLoading || isStreaming) ? stopStreaming() : handleSendWithFiles(inputValue, [])}
+                disabled={(!inputValue.trim() && !(isLoading || isStreaming))}
+                className={`${
+                  (isLoading || isStreaming)
+                    ? "bg-red-500 hover:bg-red-600 text-white" 
+                    : "bg-primary hover:bg-primary/90 text-primary-foreground"
+                } disabled:opacity-50 rounded p-1.5 transition-colors flex items-center justify-center`}
+                title={(isLoading || isStreaming) ? "停止" : "发送"}
               >
-                {isLoading ? (
-                  <Loader2 size={14} className="animate-spin" />
+                {(isLoading || isStreaming) ? (
+                  <Square size={14} fill="currentColor" />
                 ) : (
                   <Send size={14} />
                 )}

@@ -231,12 +231,6 @@ export function AgentPanel() {
 
 // 聚合并渲染所有消息
 function renderMessages(messages: Message[]) {
-  // 检测任务是否完成（最后有 attempt_completion 的结果）
-  const isTaskComplete = messages.some(m => 
-    m.content.includes("<tool_result") && 
-    m.content.includes("attempt_completion")
-  );
-  
   // 收集所有工具调用和结果
   const toolResults = new Map<string, { result: string; success: boolean }>();
   
@@ -347,7 +341,6 @@ function renderMessages(messages: Message[]) {
               params={tool.params}
               result={tool.result}
               success={tool.success}
-              isTaskComplete={isTaskComplete}
             />
           ))}
           {text && (
@@ -461,29 +454,16 @@ function ToolCallCard({
   params, 
   result, 
   success,
-  isTaskComplete 
 }: { 
   name: string; 
   params: string; 
   result?: string; 
   success?: boolean;
-  isTaskComplete?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const isComplete = result !== undefined;
   const summary = getToolSummary(name, result);
   
-  // 任务完成后自动折叠
-  useEffect(() => {
-    if (isTaskComplete && expanded) {
-      // 延迟一下，让用户看到动画
-      const timer = setTimeout(() => {
-        setExpanded(false);
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [isTaskComplete, expanded]);
-
   return (
     <div className="border border-border rounded-lg overflow-hidden bg-muted/30">
       {/* 卡片头部 - 可点击展开 */}

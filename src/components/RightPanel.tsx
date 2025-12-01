@@ -621,6 +621,30 @@ export function RightPanel() {
                     className="w-full text-xs p-2 rounded border border-border bg-background"
                   />
                 </div>
+
+                {/* 温度设置 */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs text-muted-foreground">
+                      温度 (Temperature)
+                    </label>
+                    <span className="text-xs text-muted-foreground">
+                      {config.temperature ?? 0.3}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    value={config.temperature ?? 0.3}
+                    onChange={(e) => setConfig({ temperature: parseFloat(e.target.value) })}
+                    className="w-full accent-primary h-1 bg-muted rounded-lg appearance-none cursor-pointer"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    较高的值会使输出更随机，较低的值会更集中和确定。
+                  </p>
+                </div>
               </div>
 
               {/* Agent Settings */}
