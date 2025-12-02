@@ -105,7 +105,7 @@ function DiffViewWrapper() {
 }
 
 function App() {
-  const { vaultPath, setVaultPath, currentFile, save, createNewFile, tabs, activeTabIndex, fileTree, refreshFileTree } = useFileStore();
+  const { vaultPath, setVaultPath, currentFile, save, createNewFile, tabs, activeTabIndex, fileTree, refreshFileTree, openAIMainTab } = useFileStore();
   const { pendingDiff } = useAIStore();
   const { buildIndex } = useNoteIndexStore();
   const { initialize: initializeRAG, config: ragConfig } = useRAGStore();
@@ -117,6 +117,13 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [isLoadingVault, setIsLoadingVault] = useState(false);
   const [createDbOpen, setCreateDbOpen] = useState(false);
+  
+  // 首次启动时默认打开 AI Chat
+  useEffect(() => {
+    if (tabs.length === 0) {
+      openAIMainTab();
+    }
+  }, []);
   
   // 启动时自动加载保存的工作空间
   useEffect(() => {
