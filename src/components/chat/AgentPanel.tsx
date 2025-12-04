@@ -8,9 +8,9 @@ import { useState, useRef, useEffect } from "react";
 import { useAgentStore } from "@/stores/useAgentStore";
 import { useFileStore } from "@/stores/useFileStore";
 import { MODES, getModeList } from "@/agent/modes";
-import { AgentModeSlug, Message } from "@/agent/types";
-import { parseMarkdown } from "@/lib/markdown";
+import { AgentModeSlug } from "@/agent/types";
 import { ChatInput } from "./ChatInput";
+import { AgentMessageRenderer } from "./AgentMessageRenderer";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { processMessageWithFiles, type ReferencedFile } from "@/hooks/useChatSend";
 import {
@@ -19,11 +19,9 @@ import {
   X,
   Trash2,
   ChevronDown,
-  ChevronRight,
   Loader2,
   AlertCircle,
   Bot,
-  Wrench,
   Mic,
   MicOff,
   Send,
@@ -107,8 +105,11 @@ export function AgentPanel() {
             </div>
           )}
 
-          {/* 消息列表 - 聚合工具调用和结果 */}
-          {renderMessages(messages)}
+          {/* 消息列表 - 使用 AgentMessageRenderer 组件 */}
+          <AgentMessageRenderer 
+            messages={messages} 
+            isRunning={status === "running"} 
+          />
 
           {/* 工具审批 */}
           {pendingTool && status === "waiting_approval" && (
@@ -227,161 +228,6 @@ export function AgentPanel() {
   );
 }
 
-// ============ 消息渲染 ============
-
-// 聚合并渲染所有消息
-function renderMessages(messages: Message[]) {
-  // 收集所有工具调用和结果
-  const toolResults = new Map<string, { result: string; success: boolean }>();
-  
-  // 第一遍：收集所有工具结果
-  messages.forEach(msg => {
-    const content = msg.content;
-    
-    // 提取 tool_result
-    const resultRegex = /<tool_result name="([^"]+)">([\s\S]*?)<\/tool_result>/g;
-    let match;
-    while ((match = resultRegex.exec(content)) !== null) {
-      toolResults.set(match[1], { result: match[2].trim(), success: true });
-    }
-    
-    // 提取 tool_error
-    const errorRegex = /<tool_error name="([^"]+)">([\s\S]*?)<\/tool_error>/g;
-    while ((match = errorRegex.exec(content)) !== null) {
-      toolResults.set(match[1], { result: match[2].trim(), success: false });
-    }
-  });
-
-  // 第二遍：渲染消息，跳过纯工具结果消息
-  const rendered: JSX.Element[] = [];
-  
-  messages.forEach((msg, i) => {
-    const content = msg.content;
-    const isUser = msg.role === "user";
-    
-    // 跳过工具结果消息和系统提示
-    if (content.includes("<tool_result") || 
-        content.includes("<tool_error") ||
-        content.includes("你的响应没有包含有效的工具调用")) {
-      return;
-    }
-    
-    // 用户消息
-    if (isUser) {
-      let displayContent = content;
-      displayContent = displayContent.replace(/<task>([\s\S]*?)<\/task>/g, "$1");
-      displayContent = displayContent.replace(/<current_note[^>]*>[\s\S]*?<\/current_note>/g, "");
-      displayContent = displayContent.replace(/<related_notes[^>]*>[\s\S]*?<\/related_notes>/g, ""); // 过滤 RAG 注入内容
-      displayContent = displayContent.trim();
-      
-      if (displayContent) {
-        rendered.push(
-          <div key={`user-${i}`} className="flex justify-end">
-            <div className="max-w-[85%] bg-primary text-primary-foreground rounded-2xl rounded-br-sm px-4 py-2.5 text-sm">
-              {displayContent}
-            </div>
-          </div>
-        );
-      }
-      return;
-    }
-    
-    // AI 消息 - 解析工具调用
-    const toolCalls: { name: string; params: string; result?: string; success?: boolean }[] = [];
-    let text = content;
-    
-    // 移除 thinking
-    text = text.replace(/<thinking>[\s\S]*?<\/thinking>/g, "");
-    
-    // 提取工具调用
-    const nonToolTags = ["thinking", "task", "current_note", "tool_result", "tool_error", "result",
-                         "directory", "recursive", "paths", "path", "content", "edits", "search", "replace"];
-    const toolCallRegex = /<(\w+)>([\s\S]*?)<\/\1>/g;
-    let match;
-    
-    while ((match = toolCallRegex.exec(content)) !== null) {
-      const tagName = match[1];
-      if (!nonToolTags.includes(tagName.toLowerCase())) {
-        const params = match[2].trim();
-        
-        // 获取关联的结果
-        const resultData = toolResults.get(tagName);
-        
-        // 特殊处理 attempt_completion - 不作为卡片，直接显示结果文本
-        if (tagName === "attempt_completion") {
-          const resultMatch = params.match(/<result>([\s\S]*?)<\/result>/);
-          if (resultMatch) {
-            // 将结果添加到文本显示，不添加到工具卡片
-            text = resultMatch[1].trim();
-          }
-        } else {
-          toolCalls.push({
-            name: tagName,
-            params: formatToolParams(params),
-            result: resultData?.result,
-            success: resultData?.success,
-          });
-        }
-        // 从原文中移除工具调用标签
-        text = text.replace(match[0], "");
-      }
-    }
-    
-    // 清理文本
-    text = text.replace(/<[^>]+>/g, "").trim();
-    
-    // 如果有内容，渲染
-    if (toolCalls.length > 0 || text) {
-      rendered.push(
-        <div key={`ai-${i}`} className="space-y-2">
-          {toolCalls.map((tool, j) => (
-            <ToolCallCard
-              key={`${tool.name}-${j}`}
-              name={tool.name}
-              params={tool.params}
-              result={tool.result}
-              success={tool.success}
-            />
-          ))}
-          {text && (
-            <div 
-              className="text-foreground leading-relaxed prose prose-sm dark:prose-invert max-w-none [&_*]:!text-xs [&_h1]:!text-base [&_h2]:!text-sm [&_h3]:!text-xs"
-              dangerouslySetInnerHTML={{ __html: parseMarkdown(text) }}
-            />
-          )}
-        </div>
-      );
-    }
-  });
-  
-  return rendered;
-}
-
-// 格式化工具参数为可读形式
-function formatToolParams(params: string): string {
-  // 提取常见参数
-  const parts: string[] = [];
-  
-  const dirMatch = params.match(/<directory>([^<]*)<\/directory>/);
-  if (dirMatch) parts.push(`目录: ${dirMatch[1] || "/"}`);
-  
-  const recursiveMatch = params.match(/<recursive>([^<]*)<\/recursive>/);
-  if (recursiveMatch) parts.push(`递归: ${recursiveMatch[1]}`);
-  
-  const pathsMatch = params.match(/<paths>([^<]*)<\/paths>/);
-  if (pathsMatch) parts.push(`路径: ${pathsMatch[1]}`);
-  
-  const pathMatch = params.match(/<path>([^<]*)<\/path>/);
-  if (pathMatch) parts.push(`文件: ${pathMatch[1]}`);
-  
-  if (parts.length > 0) {
-    return parts.join(" | ");
-  }
-  
-  // 如果没有识别的参数，返回简化的原始内容
-  return params.replace(/<[^>]+>/g, " ").trim().slice(0, 100);
-}
-
 // ============ 子组件 ============
 
 function ModeSelector({ mode, onChange }: { mode: AgentModeSlug; onChange: (m: AgentModeSlug) => void }) {
@@ -417,112 +263,6 @@ function ModeSelector({ mode, onChange }: { mode: AgentModeSlug; onChange: (m: A
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-// 生成工具结果摘要
-function getToolSummary(name: string, result?: string): string {
-  if (!result) return "执行中...";
-  
-  // 根据工具类型生成摘要
-  if (name === "list_notes") {
-    const fileCount = (result.match(/📄/g) || []).length;
-    const dirCount = (result.match(/📁/g) || []).length;
-    if (fileCount > 0 || dirCount > 0) {
-      return `发现 ${fileCount} 个文件${dirCount > 0 ? `，${dirCount} 个目录` : ""}`;
-    }
-  }
-  if (name === "read_note") {
-    const lines = result.split("\n").length;
-    return `读取了 ${lines} 行内容`;
-  }
-  if (name === "create_note" || name === "edit_note") {
-    return "文件已修改";
-  }
-  if (name === "attempt_completion") {
-    return "任务完成";
-  }
-  
-  // 默认：截取前 50 字符
-  return result.length > 50 ? result.slice(0, 50) + "..." : result;
-}
-
-// 工具调用卡片组件
-function ToolCallCard({ 
-  name, 
-  params, 
-  result, 
-  success,
-}: { 
-  name: string; 
-  params: string; 
-  result?: string; 
-  success?: boolean;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const isComplete = result !== undefined;
-  const summary = getToolSummary(name, result);
-  
-  return (
-    <div className="border border-border rounded-lg overflow-hidden bg-muted/30">
-      {/* 卡片头部 - 可点击展开 */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full px-3 py-2 flex items-center gap-2 hover:bg-muted/50 transition-colors text-left"
-      >
-        <Wrench className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-        <span className="text-sm font-medium text-foreground">{name}</span>
-        
-        {/* 状态图标 */}
-        {isComplete ? (
-          success ? (
-            <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-          ) : (
-            <X className="w-4 h-4 text-red-500 flex-shrink-0" />
-          )
-        ) : (
-          <Loader2 className="w-4 h-4 text-muted-foreground animate-spin flex-shrink-0" />
-        )}
-        
-        {/* 摘要 */}
-        <span className="text-xs text-muted-foreground truncate flex-1">
-          {summary}
-        </span>
-        
-        {/* 展开图标 */}
-        <ChevronRight 
-          className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${
-            expanded ? "rotate-90" : ""
-          }`} 
-        />
-      </button>
-      
-      {/* 展开的详情 - 带动画 */}
-      <div 
-        className={`border-t border-border bg-muted/20 overflow-hidden transition-all duration-300 ease-in-out ${
-          expanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 border-t-0'
-        }`}
-      >
-        <div className="px-3 py-2">
-          {params && (
-            <div className="mb-2">
-              <div className="text-xs text-muted-foreground mb-1">参数:</div>
-              <pre className="text-xs bg-background p-2 rounded overflow-x-auto">
-                {params}
-              </pre>
-            </div>
-          )}
-          {result && (
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">结果:</div>
-              <pre className="text-xs bg-background p-2 rounded overflow-x-auto max-h-48 overflow-y-auto">
-                {result}
-              </pre>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

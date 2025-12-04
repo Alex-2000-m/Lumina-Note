@@ -26,13 +26,11 @@ import {
   Mic,
   MicOff,
   Folder,
-  ChevronDown,
-  ChevronRight,
-  Wrench,
   AlertCircle,
   Check,
   Settings,
 } from "lucide-react";
+import { AgentMessageRenderer } from "../chat/AgentMessageRenderer";
 import type { ReferencedFile } from "@/hooks/useChatSend";
 import { AISettingsModal } from "../ai/AISettingsModal";
 
@@ -91,7 +89,6 @@ export function MainAIChatShell() {
   const [filePickerQuery, setFilePickerQuery] = useState("");
   const [referencedFiles, setReferencedFiles] = useState<ReferencedFile[]>([]);
   const [showDebug, setShowDebug] = useState(false);
-  const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
@@ -271,49 +268,6 @@ export function MainAIChatShell() {
     }
   };
 
-
-  // 判断是否是 Agent 中间步骤（工具调用中的消息）
-  const isIntermediateStep = (content: string, role: string): boolean => {
-    if (chatMode !== "agent" || role !== "assistant") return false;
-    
-    // 包含工具调用标签的是中间步骤
-    const toolTags = ["read_note", "edit_note", "create_note", "list_notes", "move_note", 
-                      "delete_note", "search_notes", "grep_search", "semantic_search", 
-                      "query_database", "add_database_row", "get_backlinks", "ask_user"];
-    
-    for (const tag of toolTags) {
-      if (content.includes(`<${tag}>`)) return true;
-    }
-    
-    return false;
-  };
-
-  // 提取工具调用摘要
-  const extractToolSummary = (content: string): string => {
-    const toolMatches: string[] = [];
-    
-    // 匹配工具调用
-    const toolRegex = /<(read_note|edit_note|create_note|list_notes|search_notes|grep_search|semantic_search)>/g;
-    let match;
-    while ((match = toolRegex.exec(content)) !== null) {
-      const toolName = match[1];
-      const nameMap: Record<string, string> = {
-        read_note: "读取笔记",
-        edit_note: "编辑笔记", 
-        create_note: "创建笔记",
-        list_notes: "列出文件",
-        search_notes: "搜索笔记",
-        grep_search: "文本搜索",
-        semantic_search: "语义搜索",
-      };
-      toolMatches.push(nameMap[toolName] || toolName);
-    }
-    
-    if (toolMatches.length === 0) return "执行操作";
-    if (toolMatches.length === 1) return toolMatches[0];
-    return `${toolMatches[0]} 等 ${toolMatches.length} 个操作`;
-  };
-
   // 从消息历史中提取创建/编辑的文件
   const extractCreatedFiles = useCallback((): string[] => {
     if (chatMode !== "agent") return [];
@@ -335,50 +289,6 @@ export function MainAIChatShell() {
     }
     return [...new Set(files)]; // 去重
   }, [messages, chatMode]);
-
-  // 清理消息内容（移除 XML 标签等）- 参考 AgentPanel 的 renderMessages 逻辑
-  const cleanContent = (content: string, isUser: boolean): string => {
-    if (chatMode === "agent") {
-      // 跳过工具结果消息和系统提示（这些是给 AI 看的，不需要显示给用户）
-      if (content.includes("<tool_result") || 
-          content.includes("<tool_error") ||
-          content.includes("你的响应没有包含有效的工具调用") ||
-          content.includes("请使用 <thinking> 标签分析错误原因") ||
-          content.includes("系统错误:") ||
-          content.includes("系统拒绝执行") ||
-          content.includes("用户拒绝了工具调用")) {
-        return "";
-      }
-      
-      if (isUser) {
-        return content
-          .replace(/<task>([\s\S]*?)<\/task>/g, "$1")
-          .replace(/<current_note[^>]*>[\s\S]*?<\/current_note>/g, "")
-          .replace(/<related_notes[^>]*>[\s\S]*?<\/related_notes>/g, "")
-          .trim();
-      } else {
-        let text = content;
-        
-        // 移除 thinking
-        text = text.replace(/<thinking>[\s\S]*?<\/thinking>/g, "");
-        
-        // 处理 attempt_completion - 提取 result 内容
-        const attemptMatch = text.match(/<attempt_completion>[\s\S]*?<result>([\s\S]*?)<\/result>[\s\S]*?<\/attempt_completion>/);
-        if (attemptMatch) {
-          text = attemptMatch[1].trim();
-        } else {
-          // 移除所有工具调用标签（保留标签内的参数内容会很乱，直接移除整个工具调用）
-          text = text.replace(/<(read_note|edit_note|create_note|list_notes|move_note|delete_note|search_notes|grep_search|semantic_search|query_database|add_database_row|get_backlinks|ask_user|attempt_completion)>[\s\S]*?<\/\1>/g, "");
-        }
-        
-        // 清理剩余的 XML 标签
-        text = text.replace(/<[^>]+>/g, "").trim();
-        
-        return text;
-      }
-    }
-    return content;
-  };
 
   // 新建对话
   const handleNewChat = () => {
@@ -532,125 +442,20 @@ export function MainAIChatShell() {
         {hasStarted && (
           <div className="flex-1 w-full overflow-y-auto scrollbar-thin">
             <div className="max-w-3xl mx-auto px-4 pt-8">
-            {(() => {
-              // 将消息分组：连续的中间步骤合并为一组
-              const groups: { type: "normal" | "steps"; messages: typeof messages; startIdx: number }[] = [];
-              const isAgentCompleted = chatMode === "agent" && agentStatus !== "running";
-              
-              // 如果 Agent 已完成，把所有中间步骤合并为一个组
-              if (isAgentCompleted) {
-                let allSteps: typeof messages = [];
-                let firstStepIdx = -1;
-                
-                messages.forEach((msg, idx) => {
-                  const isStep = isIntermediateStep(msg.content || "", msg.role);
-                  
-                  if (isStep) {
-                    if (firstStepIdx === -1) firstStepIdx = idx;
-                    allSteps.push(msg);
-                  } else {
-                    // 在遇到第一条普通消息前，先把之前的步骤加入
-                    if (allSteps.length > 0 && firstStepIdx !== -1) {
-                      groups.push({ type: "steps", messages: [...allSteps], startIdx: firstStepIdx });
-                      allSteps = [];
-                      firstStepIdx = -1;
-                    }
-                    groups.push({ type: "normal", messages: [msg], startIdx: idx });
-                  }
-                });
-                
-                // 处理末尾的中间步骤
-                if (allSteps.length > 0 && firstStepIdx !== -1) {
-                  groups.push({ type: "steps", messages: allSteps, startIdx: firstStepIdx });
-                }
-              } else {
-                // Agent 运行中，每个工具调用单独显示（保持实时反馈）
-                let currentSteps: typeof messages = [];
-                let stepStartIdx = 0;
-                
-                messages.forEach((msg, idx) => {
-                  const isStep = isIntermediateStep(msg.content || "", msg.role);
-                  
-                  if (isStep) {
-                    if (currentSteps.length === 0) stepStartIdx = idx;
-                    currentSteps.push(msg);
-                  } else {
-                    if (currentSteps.length > 0) {
-                      groups.push({ type: "steps", messages: [...currentSteps], startIdx: stepStartIdx });
-                      currentSteps = [];
-                    }
-                    groups.push({ type: "normal", messages: [msg], startIdx: idx });
-                  }
-                });
-                
-                if (currentSteps.length > 0) {
-                  groups.push({ type: "steps", messages: currentSteps, startIdx: stepStartIdx });
-                }
-              }
-              
-              return groups.map((group) => {
-                if (group.type === "steps") {
-                  // 折叠的中间步骤组
-                  const isExpanded = expandedSteps.has(group.startIdx);
-                  const summaries = group.messages.map(m => extractToolSummary(m.content || ""));
-                  const uniqueSummaries = [...new Set(summaries)];
-                  
-                  return (
-                    <motion.div
-                      key={`steps-${group.startIdx}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="mb-4"
-                    >
-                      <button
-                        onClick={() => {
-                          setExpandedSteps(prev => {
-                            const next = new Set(prev);
-                            if (next.has(group.startIdx)) {
-                              next.delete(group.startIdx);
-                            } else {
-                              next.add(group.startIdx);
-                            }
-                            return next;
-                          });
-                        }}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        <Wrench size={12} />
-                        <span>
-                          {group.messages.length} 个步骤: {uniqueSummaries.slice(0, 2).join(", ")}
-                          {uniqueSummaries.length > 2 && "..."}
-                        </span>
-                      </button>
-                      
-                      {isExpanded && (
-                        <div className="mt-2 pl-4 border-l-2 border-muted space-y-2">
-                          {group.messages.map((msg, i) => {
-                            const content = cleanContent(msg.content || "", false);
-                            if (!content.trim()) return null;
-                            return (
-                              <div key={i} className="text-sm text-muted-foreground">
-                                {content}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </motion.div>
-                  );
-                }
-                
-                // 普通消息
-                const msg = group.messages[0];
+            
+            {/* Agent 模式：使用 AgentMessageRenderer 组件 */}
+            {chatMode === "agent" ? (
+              <AgentMessageRenderer 
+                messages={agentMessages} 
+                isRunning={agentStatus === "running"} 
+              />
+            ) : (
+              /* Chat 模式：原有的消息渲染 */
+              chatMessages.map((msg, idx) => {
                 const isUser = msg.role === "user";
-                const content = cleanContent(msg.content || "", isUser);
-                
-                if (!content.trim()) return null;
-                
                 return (
                   <motion.div 
-                    key={group.startIdx}
+                    key={idx}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className={`mb-6 flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}
@@ -666,18 +471,18 @@ export function MainAIChatShell() {
                         : "text-foreground"
                     }`}>
                       {isUser ? (
-                        <span className="text-sm">{content}</span>
+                        <span className="text-sm">{msg.content}</span>
                       ) : (
                         <div 
                           className="prose prose-sm dark:prose-invert max-w-none leading-relaxed"
-                          dangerouslySetInnerHTML={{ __html: parseMarkdown(content) }}
+                          dangerouslySetInnerHTML={{ __html: parseMarkdown(msg.content) }}
                         />
                       )}
                     </div>
                   </motion.div>
                 );
-              });
-            })()}
+              })
+            )}
 
             {/* 创建/编辑的文件链接 */}
             {chatMode === "agent" && agentStatus !== "running" && (() => {

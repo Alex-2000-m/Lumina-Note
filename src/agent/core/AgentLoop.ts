@@ -162,9 +162,11 @@ export class AgentLoop {
         // 3. 优先使用 FC 响应中的 toolCalls，否则回退到 XML 解析
         let toolCalls: ToolCall[];
         let isCompletion = false;
+        let isFCMode = false;
         
         if (response.toolCalls && response.toolCalls.length > 0) {
           // FC 模式：直接使用结构化的工具调用
+          isFCMode = true;
           toolCalls = response.toolCalls.map(tc => ({
             name: tc.name,
             params: tc.arguments,
@@ -180,9 +182,21 @@ export class AgentLoop {
         }
 
         // 4. 添加 assistant 消息
+        // FC 模式下，把工具调用转换为 XML 格式附加到 content，便于前端解析显示
+        let assistantContent = response.content;
+        if (isFCMode && toolCalls.length > 0) {
+          const toolCallsXml = toolCalls.map(tc => {
+            const paramsXml = Object.entries(tc.params)
+              .map(([key, value]) => `<${key}>${typeof value === 'string' ? value : JSON.stringify(value)}</${key}>`)
+              .join('\n');
+            return `<${tc.name}>\n${paramsXml}\n</${tc.name}>`;
+          }).join('\n\n');
+          assistantContent = `${response.content}\n\n${toolCallsXml}`;
+        }
+        
         this.stateManager.addMessage({
           role: "assistant",
-          content: response.content,
+          content: assistantContent,
         });
 
         // 5. 处理工具调用
@@ -320,6 +334,18 @@ export class AgentLoop {
 
       // 执行工具
       const result = await this.executeTool(toolCall, context);
+
+      // 特殊处理 attempt_completion：将 result 内容作为 assistant 最终回复
+      // 这样无论是 XML 模式还是 FC 模式，最终回答都能正确显示
+      if (toolCall.name === "attempt_completion" && result.success) {
+        const completionResult = toolCall.params.result as string;
+        if (completionResult) {
+          this.stateManager.addMessage({
+            role: "assistant",
+            content: `<attempt_completion_result>\n${completionResult}\n</attempt_completion_result>`,
+          });
+        }
+      }
 
       // 将结果添加到消息
       let resultMsg = formatToolResult(toolCall, result);
