@@ -7,6 +7,12 @@ dist-ssr/
 
 # Tauri
 src-tauri/target/
+src-tauri/gen/
+src-tauri/build.log
+src-tauri/CEF_BUILD_SETUP.md
+src-tauri/build-cef-setup.rs
+src-tauri/build-cef.bat
+src-tauri/build-cef.sh
 
 # IDE
 .vscode/
@@ -65,7 +71,23 @@ README-1.md
 # *.md
 # !README.md
 
-
 # 克隆的外部项目
 Roo-Code/
 media-extended/
+
+# ===================
+# Kiro 相关
+# ===================
+# 忽略整个 .kiro 目录（spec 开发文档不上传）
+.kiro/
+
+# ===================
+# 临时文件和调试日志
+# ===================
+# 构建日志
+build-full.log
+android-build-*.log
+2025-*.log
+
+# 调试日志目录
+debug-logs/

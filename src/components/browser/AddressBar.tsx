@@ -25,7 +25,15 @@ interface AddressBarProps {
   canGoForward?: boolean;
   isLoading?: boolean;
   className?: string;
+  searchEngine?: 'bing' | 'google' | 'duckduckgo';
 }
+
+// 搜索引擎配置
+const SEARCH_ENGINES = {
+  bing: 'https://www.bing.com/search?q=',
+  google: 'https://www.google.com/search?q=',
+  duckduckgo: 'https://duckduckgo.com/?q=',
+};
 
 export function AddressBar({
   url,
@@ -38,49 +46,73 @@ export function AddressBar({
   canGoForward = true,
   isLoading = false,
   className,
+  searchEngine = 'bing',
 }: AddressBarProps) {
   const [inputValue, setInputValue] = useState(url);
   const [isFocused, setIsFocused] = useState(false);
+  const [originalUrl, setOriginalUrl] = useState(url);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 当外部 URL 变化时更新输入框
   useEffect(() => {
     if (!isFocused) {
       setInputValue(url);
+      setOriginalUrl(url);
     }
   }, [url, isFocused]);
 
-  // 处理导航
-  const handleNavigate = useCallback(() => {
-    let navigateUrl = inputValue.trim();
+  // 分类输入内容
+  const classifyInput = useCallback((input: string): { type: 'url' | 'search'; url: string } => {
+    const trimmed = input.trim();
     
-    if (!navigateUrl) return;
-    
-    // 如果不是完整 URL，添加协议
-    if (!navigateUrl.match(/^https?:\/\//i)) {
-      // 检查是否是搜索查询（包含空格或不像域名）
-      if (navigateUrl.includes(' ') || !navigateUrl.includes('.')) {
-        // 使用搜索引擎
-        navigateUrl = `https://www.bing.com/search?q=${encodeURIComponent(navigateUrl)}`;
-      } else {
-        navigateUrl = `https://${navigateUrl}`;
-      }
+    if (!trimmed) {
+      return { type: 'url', url: '' };
     }
     
-    setInputValue(navigateUrl);
-    onNavigate(navigateUrl);
+    // 已有协议的 URL
+    if (trimmed.match(/^https?:\/\//i)) {
+      return { type: 'url', url: trimmed };
+    }
+    
+    // 检查是否是搜索查询
+    // 包含空格 = 搜索查询
+    if (trimmed.includes(' ')) {
+      const searchUrl = SEARCH_ENGINES[searchEngine] + encodeURIComponent(trimmed);
+      return { type: 'search', url: searchUrl };
+    }
+    
+    // 不包含点号 = 搜索查询
+    if (!trimmed.includes('.')) {
+      const searchUrl = SEARCH_ENGINES[searchEngine] + encodeURIComponent(trimmed);
+      return { type: 'search', url: searchUrl };
+    }
+    
+    // 包含点号但无协议 = 域名，添加 https://
+    return { type: 'url', url: `https://${trimmed}` };
+  }, [searchEngine]);
+
+  // 处理导航
+  const handleNavigate = useCallback(() => {
+    const classified = classifyInput(inputValue);
+    
+    if (!classified.url) return;
+    
+    setInputValue(classified.url);
+    setOriginalUrl(classified.url);
+    onNavigate(classified.url);
     inputRef.current?.blur();
-  }, [inputValue, onNavigate]);
+  }, [inputValue, classifyInput, onNavigate]);
 
   // 处理键盘事件
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleNavigate();
     } else if (e.key === 'Escape') {
-      setInputValue(url);
+      // 恢复原始 URL
+      setInputValue(originalUrl);
       inputRef.current?.blur();
     }
-  }, [handleNavigate, url]);
+  }, [handleNavigate, originalUrl]);
 
   // 获取 URL 显示信息
   const getUrlInfo = useCallback(() => {

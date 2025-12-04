@@ -111,6 +111,14 @@ function DiffViewWrapper() {
   );
 }
 
+interface BrowserNewTabEventPayload {
+  parent_tab_id: string;
+  url: string;
+}
+
+// 避免在 React 严格模式和 HMR 下重复注册浏览器新标签事件监听
+let browserNewTabListenerRegistered = false;
+
 function App() {
   const { vaultPath, setVaultPath, currentFile, save, createNewFile, tabs, activeTabIndex, fileTree, refreshFileTree, openAIMainTab } = useFileStore();
   const { pendingDiff } = useAIStore();
@@ -178,6 +186,37 @@ function App() {
       if (debounceTimer) clearTimeout(debounceTimer);
     };
   }, [vaultPath, refreshFileTree]);
+
+  // 监听后端触发的浏览器新标签事件（window.open）
+  useEffect(() => {
+    if (browserNewTabListenerRegistered) return;
+    browserNewTabListenerRegistered = true;
+
+    let unlisten: (() => void) | null = null;
+
+    const setup = async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<BrowserNewTabEventPayload>("browser:new-tab", (event) => {
+          const payload = event.payload;
+          if (!payload || !payload.url) return;
+          // 使用最新的 store 状态创建网页标签，避免依赖闭包
+          useFileStore.getState().openWebpageTab(payload.url);
+        });
+      } catch (error) {
+        console.warn("[Browser] Failed to setup new-tab listener:", error);
+      }
+    };
+
+    setup();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+      browserNewTabListenerRegistered = false;
+    };
+  }, []);
   const {
     leftSidebarOpen,
     rightSidebarOpen,
@@ -412,6 +451,7 @@ function App() {
           <div className="flex-1 flex flex-col overflow-hidden bg-background">
             <TabBar />
             <BrowserView
+              key={activeTab.id}
               tabId={activeTab.id}
               initialUrl={activeTab.webpageUrl}
               isActive={true}

@@ -962,8 +962,31 @@ export const useFileStore = create<FileState>()(
 
   // 打开网页标签页
   openWebpageTab: (url: string, title?: string) => {
-    const { tabs, activeTabIndex, currentContent, isDirty, undoStack, redoStack } = get();
-    
+    const { tabs, activeTabIndex, currentContent, isDirty, undoStack, redoStack, switchTab } = get();
+
+    // 如果已有相同 URL 的网页标签，直接切换过去，避免重复创建
+    if (url) {
+      const existingIndex = tabs.findIndex(
+        (t) => t.type === "webpage" && t.webpageUrl === url
+      );
+      if (existingIndex !== -1) {
+        // 在切换前仍然保存当前标签页状态
+        if (activeTabIndex >= 0 && tabs[activeTabIndex]) {
+          const updatedTabs = [...tabs];
+          updatedTabs[activeTabIndex] = {
+            ...updatedTabs[activeTabIndex],
+            content: currentContent,
+            isDirty,
+            undoStack,
+            redoStack,
+          };
+          set({ tabs: updatedTabs });
+        }
+        switchTab(existingIndex);
+        return;
+      }
+    }
+
     // 生成唯一 ID
     const tabId = `__webpage_${Date.now()}__`;
     

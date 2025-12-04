@@ -2,7 +2,18 @@ use crate::error::AppError;
 use crate::fs::{self, FileEntry, watcher};
 use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewBuilder, LogicalPosition, LogicalSize, Position, Size};
 use tauri::WebviewUrl;
+use tauri::webview::NewWindowResponse;
+use tauri::Emitter;
 use std::io::Read;
+
+// Browser / WebView 调试日志，写入与前端相同的 debug-logs 目录，方便统一排查
+fn browser_debug_log(app: &AppHandle, message: String) {
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let content = format!("[Browser-Rust] {}\n", message);
+        let _ = crate::llm::append_debug_log(app_clone, content).await;
+    });
+}
 
 /// Read file content
 #[tauri::command]
@@ -494,6 +505,12 @@ pub async fn start_file_watcher(app: AppHandle, watch_path: String) -> Result<()
         .map_err(|e| AppError::InvalidPath(e))
 }
 
+#[derive(serde::Serialize, Clone)]
+pub struct BrowserNewTabEventPayload {
+    pub parent_tab_id: String,
+    pub url: String,
+}
+
 // ============== Browser WebView Commands ==============
 
 /// 创建浏览器 WebView（支持多标签页）
@@ -505,33 +522,68 @@ pub async fn create_browser_webview(
     x: f64,
     y: f64,
     width: f64,
-    height: f64
+    height: f64,
 ) -> Result<(), AppError> {
     let windows = app.windows();
     let main_window = windows.get("main")
         .ok_or_else(|| AppError::InvalidPath("Main window not found".into()))?;
-    
+
+    browser_debug_log(&app, format!(
+        "create_browser_webview: tab_id={} url={} rect=({}, {}) {}x{}",
+        tab_id, url, x, y, width, height
+    ));
+
     // 使用 tab_id 作为 webview 标识
     let webview_id = format!("browser-{}", tab_id);
-    
+
     // 如果已存在同 id 的 webview，先关闭
     if let Some(webview) = app.get_webview(&webview_id) {
         let _ = webview.close();
     }
-    
+
+    // 解析 URL
+    let parsed_url: tauri::Url = url
+        .parse()
+        .map_err(|_| AppError::InvalidPath("Invalid URL".into()))?;
+
+    // 拦截 window.open / 新窗口请求，通知前端创建新的网页标签页
+    let app_handle = app.clone();
+    let parent_tab_id = tab_id.clone();
+
     let webview_builder = WebviewBuilder::new(
         &webview_id,
-        WebviewUrl::External(url.parse().map_err(|_| AppError::InvalidPath("Invalid URL".into()))?)
-    );
-    
+        WebviewUrl::External(parsed_url),
+    )
+    .on_new_window(move |new_url, _features| {
+        if new_url.scheme() == "http" || new_url.scheme() == "https" {
+            browser_debug_log(&app_handle, format!(
+                "on_new_window: parent_tab_id={} new_url={}",
+                parent_tab_id,
+                new_url,
+            ));
+            let payload = BrowserNewTabEventPayload {
+                parent_tab_id: parent_tab_id.clone(),
+                url: new_url.to_string(),
+            };
+            // 向前端广播新标签事件（忽略发送错误）
+            let _ = app_handle.emit("browser:new-tab", payload);
+            NewWindowResponse::Deny
+        } else {
+            NewWindowResponse::Allow
+        }
+    });
+
     let _webview = main_window.add_child(
         webview_builder,
         Position::Logical(LogicalPosition::new(x, y)),
         Size::Logical(LogicalSize::new(width, height)),
     ).map_err(|e| AppError::InvalidPath(e.to_string()))?;
-    
-    println!("[Browser] WebView 创建成功: {} -> {} at ({}, {}) size {}x{}", webview_id, url, x, y, width, height);
-    
+
+    println!(
+        "[Browser] WebView 创建成功: {} -> {} at ({}, {}) size {}x{}",
+        webview_id, url, x, y, width, height
+    );
+
     Ok(())
 }
 
@@ -547,6 +599,10 @@ pub async fn update_browser_webview_bounds(
 ) -> Result<(), AppError> {
     let webview_id = format!("browser-{}", tab_id);
     if let Some(webview) = app.get_webview(&webview_id) {
+        browser_debug_log(&app, format!(
+            "update_browser_webview_bounds: tab_id={} rect=({}, {}) {}x{}",
+            tab_id, x, y, width, height
+        ));
         webview.set_position(Position::Logical(LogicalPosition::new(x, y)))
             .map_err(|e| AppError::InvalidPath(e.to_string()))?;
         webview.set_size(Size::Logical(LogicalSize::new(width, height)))
@@ -562,6 +618,7 @@ pub async fn close_browser_webview(app: AppHandle, tab_id: String) -> Result<(),
     if let Some(webview) = app.get_webview(&webview_id) {
         webview.close().map_err(|e| AppError::InvalidPath(e.to_string()))?;
         println!("[Browser] WebView 已关闭: {}", webview_id);
+        browser_debug_log(&app, format!("close_browser_webview: tab_id={}", tab_id));
     }
     Ok(())
 }
@@ -575,6 +632,7 @@ pub async fn navigate_browser_webview(
 ) -> Result<(), AppError> {
     let webview_id = format!("browser-{}", tab_id);
     if let Some(webview) = app.get_webview(&webview_id) {
+        browser_debug_log(&app, format!("navigate_browser_webview: tab_id={} url={}", tab_id, url));
         let parsed_url: tauri::Url = url.parse()
             .map_err(|_| AppError::InvalidPath("Invalid URL".into()))?;
         webview.navigate(parsed_url)
@@ -589,6 +647,7 @@ pub async fn navigate_browser_webview(
 pub async fn browser_webview_go_back(app: AppHandle, tab_id: String) -> Result<(), AppError> {
     let webview_id = format!("browser-{}", tab_id);
     if let Some(webview) = app.get_webview(&webview_id) {
+        browser_debug_log(&app, format!("browser_webview_go_back: tab_id={}", tab_id));
         // 通过 JS 执行后退
         webview.eval("history.back()")
             .map_err(|e| AppError::InvalidPath(e.to_string()))?;
@@ -601,6 +660,7 @@ pub async fn browser_webview_go_back(app: AppHandle, tab_id: String) -> Result<(
 pub async fn browser_webview_go_forward(app: AppHandle, tab_id: String) -> Result<(), AppError> {
     let webview_id = format!("browser-{}", tab_id);
     if let Some(webview) = app.get_webview(&webview_id) {
+        browser_debug_log(&app, format!("browser_webview_go_forward: tab_id={}", tab_id));
         webview.eval("history.forward()")
             .map_err(|e| AppError::InvalidPath(e.to_string()))?;
     }
@@ -612,6 +672,7 @@ pub async fn browser_webview_go_forward(app: AppHandle, tab_id: String) -> Resul
 pub async fn browser_webview_reload(app: AppHandle, tab_id: String) -> Result<(), AppError> {
     let webview_id = format!("browser-{}", tab_id);
     if let Some(webview) = app.get_webview(&webview_id) {
+        browser_debug_log(&app, format!("browser_webview_reload: tab_id={}", tab_id));
         webview.eval("location.reload()")
             .map_err(|e| AppError::InvalidPath(e.to_string()))?;
     }
@@ -627,6 +688,10 @@ pub async fn set_browser_webview_visible(
 ) -> Result<(), AppError> {
     let webview_id = format!("browser-{}", tab_id);
     if let Some(webview) = app.get_webview(&webview_id) {
+        browser_debug_log(&app, format!(
+            "set_browser_webview_visible: tab_id={} visible={}",
+            tab_id, visible
+        ));
         if visible {
             webview.set_position(Position::Logical(LogicalPosition::new(0.0, 0.0)))
                 .map_err(|e| AppError::InvalidPath(e.to_string()))?;

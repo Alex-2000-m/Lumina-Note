@@ -8,6 +8,7 @@ mod fs;
 mod error;
 mod vector_db;
 mod llm;
+mod cef;
 
 #[cfg(debug_assertions)]
 use tauri::Manager;
@@ -49,6 +50,22 @@ fn main() {
             commands::browser_webview_go_forward,
             commands::browser_webview_reload,
             commands::set_browser_webview_visible,
+            // CEF Browser commands
+            cef::commands::create_cef_browser,
+            cef::commands::navigate_cef,
+            cef::commands::close_cef_browser,
+            cef::commands::cef_go_back,
+            cef::commands::cef_go_forward,
+            cef::commands::cef_reload,
+            cef::commands::cef_stop,
+            cef::commands::cef_execute_js,
+            cef::commands::cef_get_page_content,
+            cef::commands::cef_get_selection,
+            cef::commands::cef_on_url_change,
+            cef::commands::cef_on_title_change,
+            cef::commands::cef_on_loading_state_change,
+            cef::commands::cef_switch_tab,
+            cef::commands::cef_update_bounds,
             // Vector DB commands
             vector_db::init_vector_db,
             vector_db::upsert_vector_chunks,
