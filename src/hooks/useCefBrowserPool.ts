@@ -5,6 +5,8 @@
 
 import { useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { type as osType } from '@tauri-apps/api/os';
+import { WebviewWindow } from '@tauri-apps/api/window';
 
 export interface CefBrowserInstance {
   tabId: string;
@@ -13,6 +15,7 @@ export interface CefBrowserInstance {
   y: number;
   width: number;
   height: number;
+  windowHandle?: WebviewWindow;
 }
 
 export interface UseCefBrowserPoolOptions {
@@ -29,6 +32,7 @@ export class CefBrowserPoolManager {
   private instances: Map<string, CefBrowserInstance> = new Map();
   private activeTab: string | null = null;
   private options?: UseCefBrowserPoolOptions;
+  private isMacPromise = osType().then((t) => t === 'Darwin').catch(() => false);
 
   constructor(options?: UseCefBrowserPoolOptions) {
     this.options = options;
@@ -46,12 +50,45 @@ export class CefBrowserPoolManager {
     height: number
   ): Promise<void> {
     try {
+      const isMac = await this.isMacPromise;
       // Validate inputs
       if (!tabId) throw new Error('tabId cannot be empty');
       if (!url) throw new Error('url cannot be empty');
       if (width <= 0 || height <= 0) throw new Error('Width and height must be positive');
 
-      // Create CEF browser instance
+      if (isMac) {
+        // Hide all existing instances
+        for (const instance of this.instances.values()) {
+          instance.isVisible = false;
+          await instance.windowHandle?.hide();
+        }
+
+        const win = new WebviewWindow(tabId, {
+          url,
+          x,
+          y,
+          width,
+          height,
+          visible: true,
+        });
+
+        this.instances.set(tabId, {
+          tabId,
+          isVisible: true,
+          x,
+          y,
+          width,
+          height,
+          windowHandle: win,
+        });
+
+        this.activeTab = tabId;
+        this.options?.onInstanceCreated?.(tabId);
+        console.log('[CEF Pool] Webview instance created (macOS fallback):', tabId);
+        return;
+      }
+
+      // Create CEF browser instance (non-macOS)
       await invoke('create_cef_browser', {
         tabId,
         url,
@@ -91,9 +128,25 @@ export class CefBrowserPoolManager {
    */
   async destroyInstance(tabId: string): Promise<void> {
     try {
+      const isMac = await this.isMacPromise;
       if (!tabId) throw new Error('tabId cannot be empty');
 
-      // Close CEF browser
+      if (isMac) {
+        const instance = this.instances.get(tabId);
+        await instance?.windowHandle?.close();
+
+        this.instances.delete(tabId);
+
+        if (this.activeTab === tabId) {
+          this.activeTab = null;
+        }
+
+        this.options?.onInstanceDestroyed?.(tabId);
+        console.log('[CEF Pool] Webview instance destroyed (macOS fallback):', tabId);
+        return;
+      }
+
+      // Close CEF browser (non-macOS)
       await invoke('close_cef_browser', { tabId });
 
       // Remove from tracking
@@ -117,7 +170,31 @@ export class CefBrowserPoolManager {
    */
   async switchTab(tabId: string): Promise<void> {
     try {
+      const isMac = await this.isMacPromise;
       if (!tabId) throw new Error('tabId cannot be empty');
+
+      if (isMac) {
+        // Hide all instances
+        for (const [id, instance] of this.instances.entries()) {
+          if (id !== tabId && instance.isVisible) {
+            instance.isVisible = false;
+            await instance.windowHandle?.hide();
+          }
+        }
+
+        // Show target instance
+        const targetInstance = this.instances.get(tabId);
+        if (targetInstance) {
+          targetInstance.isVisible = true;
+          await targetInstance.windowHandle?.show();
+          await targetInstance.windowHandle?.setFocus();
+        }
+
+        this.activeTab = tabId;
+        this.options?.onTabSwitched?.(tabId);
+        console.log('[CEF Pool] Webview tab switched (macOS fallback):', tabId);
+        return;
+      }
 
       // Hide all instances
       for (const [id, instance] of this.instances.entries()) {
@@ -132,7 +209,7 @@ export class CefBrowserPoolManager {
         targetInstance.isVisible = true;
       }
 
-      // Notify backend
+      // Notify backend (non-macOS)
       await invoke('cef_switch_tab', { tabId });
 
       this.activeTab = tabId;
@@ -156,6 +233,7 @@ export class CefBrowserPoolManager {
     height: number
   ): Promise<void> {
     try {
+      const isMac = await this.isMacPromise;
       if (!tabId) throw new Error('tabId cannot be empty');
       if (width <= 0 || height <= 0) throw new Error('Width and height must be positive');
 
@@ -168,7 +246,22 @@ export class CefBrowserPoolManager {
         instance.height = height;
       }
 
-      // Notify backend
+      if (isMac) {
+        const win = this.instances.get(tabId)?.windowHandle;
+        if (win) {
+          await win.setPosition({ x, y });
+          await win.setSize({ width, height });
+        }
+        console.log('[CEF Pool] Webview bounds updated (macOS fallback):', tabId, {
+          x,
+          y,
+          width,
+          height,
+        });
+        return;
+      }
+
+      // Notify backend (non-macOS)
       await invoke('cef_update_bounds', {
         tabId,
         x,
