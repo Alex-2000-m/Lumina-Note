@@ -4,6 +4,7 @@
  */
 
 import type { EmbeddingResult, BatchEmbeddingResult, RAGConfig } from "./types";
+import { tauriFetch } from "@/lib/tauriFetch";
 
 export class Embedder {
   private config: RAGConfig;
@@ -163,30 +164,34 @@ export class Embedder {
     
     // 尝试新版 API
     try {
-      const response = await fetch(`${baseUrl}/api/embed`, {
+      const response = await tauriFetch({
+        url: `${baseUrl}/api/embed`,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: this.config.embeddingModel,
           input: text,
         }),
+        timeout_secs: 120,
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        this.ollamaApiVersion = 'new';
-        return { embedding: data.embeddings[0] };
+      if (response.error) {
+        throw new Error(`Ollama Embedding API 错误: ${response.error}`);
       }
-      
-      // 如果 404，回退到旧版
+
       if (response.status === 404) {
         console.log('[Embedder] Ollama /api/embed not found, falling back to legacy /api/embeddings');
         this.ollamaApiVersion = 'legacy';
         return this.embedOllamaLegacy(text, baseUrl);
       }
-      
-      const error = await response.text();
-      throw new Error(`Ollama Embedding API 错误: ${error}`);
+
+      if (response.status >= 200 && response.status < 300) {
+        const data = JSON.parse(response.body);
+        this.ollamaApiVersion = 'new';
+        return { embedding: data.embeddings[0] };
+      }
+
+      throw new Error(`Ollama Embedding API 错误 (${response.status}): ${response.body}`);
     } catch (e) {
       // 网络错误或其他错误，尝试旧版
       if (this.ollamaApiVersion === null) {
@@ -202,21 +207,26 @@ export class Embedder {
    * Ollama 旧版 API (/api/embeddings)
    */
   private async embedOllamaLegacy(text: string, baseUrl: string): Promise<EmbeddingResult> {
-    const response = await fetch(`${baseUrl}/api/embeddings`, {
+    const response = await tauriFetch({
+      url: `${baseUrl}/api/embeddings`,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: this.config.embeddingModel,
         prompt: text,
       }),
+      timeout_secs: 120,
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Ollama Embedding API 错误: ${error}`);
+    if (response.error) {
+      throw new Error(`Ollama Embedding API 错误: ${response.error}`);
     }
 
-    const data = await response.json();
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`Ollama Embedding API 错误 (${response.status}): ${response.body}`);
+    }
+
+    const data = JSON.parse(response.body);
     return { embedding: data.embedding };
   }
 
@@ -233,29 +243,34 @@ export class Embedder {
     
     // 尝试新版 API (支持批量)
     try {
-      const response = await fetch(`${baseUrl}/api/embed`, {
+      const response = await tauriFetch({
+        url: `${baseUrl}/api/embed`,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: this.config.embeddingModel,
           input: texts,
         }),
+        timeout_secs: 300,
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        this.ollamaApiVersion = 'new';
-        return { embeddings: data.embeddings };
+      if (response.error) {
+        throw new Error(`Ollama Embedding API 错误: ${response.error}`);
       }
-      
+
       if (response.status === 404) {
         console.log('[Embedder] Ollama /api/embed not found, falling back to legacy');
         this.ollamaApiVersion = 'legacy';
         return this.embedBatchOllamaLegacy(texts, baseUrl);
       }
-      
-      const error = await response.text();
-      throw new Error(`Ollama Embedding API 错误: ${error}`);
+
+      if (response.status >= 200 && response.status < 300) {
+        const data = JSON.parse(response.body);
+        this.ollamaApiVersion = 'new';
+        return { embeddings: data.embeddings };
+      }
+
+      throw new Error(`Ollama Embedding API 错误 (${response.status}): ${response.body}`);
     } catch (e) {
       if (this.ollamaApiVersion === null) {
         this.ollamaApiVersion = 'legacy';
