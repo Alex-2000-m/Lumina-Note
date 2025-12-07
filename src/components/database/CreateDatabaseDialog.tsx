@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useDatabaseStore } from "@/stores/useDatabaseStore";
 import { useFileStore } from "@/stores/useFileStore";
 import { useBrowserStore } from "@/stores/useBrowserStore";
-import type { CreateDatabaseOptions } from "@/types/database";
 import { Database, ListTodo, FolderKanban, Book, X } from "lucide-react";
 
 interface CreateDatabaseDialogProps {
