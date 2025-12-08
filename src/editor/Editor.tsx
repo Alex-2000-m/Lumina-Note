@@ -17,7 +17,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Columns,
+  Download,
 } from "lucide-react";
+import { exportToPdf, getExportFileName } from "@/lib/exportPdf";
 import { TabBar } from "@/components/layout/TabBar";
 import { cn } from "@/lib/utils";
 
@@ -337,6 +339,13 @@ export function Editor() {
                 title="分屏编辑"
               >
                 <Columns size={16} />
+              </button>
+              <button
+                onClick={() => exportToPdf(currentContent, getExportFileName(currentFile))}
+                className="p-1 hover:bg-accent rounded transition-colors text-muted-foreground hover:text-foreground"
+                title="导出 PDF"
+              >
+                <Download size={16} />
               </button>
             </>
           )}
