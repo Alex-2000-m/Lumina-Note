@@ -799,18 +799,15 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         const v = viewRef.current;
         // 从 store 获取最新的 vaultPath
         const currentVaultPath = useFileStore.getState().vaultPath;
-        console.log('[Image Paste] vaultPath:', currentVaultPath);
-        if (!v || !currentVaultPath) {
-          console.log('[Image Paste] 跳过: view 或 vaultPath 为空');
-          return;
+                if (!v || !currentVaultPath) {
+                    return;
         }
         
         const items = e.clipboardData?.items;
         if (!items) return;
         
         for (const item of items) {
-          console.log('[Image Paste] item type:', item.type);
-          if (item.type.startsWith('image/')) {
+                    if (item.type.startsWith('image/')) {
             e.preventDefault();
             
             const file = item.getAsFile();
@@ -834,10 +831,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
                 changes: { from: pos, insert: imageMarkdown },
                 selection: { anchor: pos + imageMarkdown.length },
               });
-              console.log('[Image] 图片已保存:', filePath);
-            } catch (err) {
-              console.error('[Image] 保存图片失败:', err);
-            }
+                          } catch (err) {
+                          }
             return;
           }
         }
@@ -984,6 +979,29 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         window.removeEventListener("selection-ai-edit", onAi);
         window.removeEventListener("insert-summary-callout", onSum);
       };
+    }, []);
+
+    // 监听自定义拖拽事件（从文件树拖拽创建双链）
+    useEffect(() => {
+      const handleLuminaDrop = (e: Event) => {
+        const { wikiLink, x, y } = (e as CustomEvent).detail;
+        const v = viewRef.current;
+        const container = containerRef.current;
+        if (!v || !container) return;
+        
+        const rect = container.getBoundingClientRect();
+        if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+        
+        const pos = v.posAtCoords({ x, y }) ?? v.state.selection.main.head;
+        v.dispatch({
+          changes: { from: pos, insert: wikiLink },
+          selection: { anchor: pos + wikiLink.length },
+        });
+        v.focus();
+      };
+      
+      window.addEventListener('lumina-drop', handleLuminaDrop);
+      return () => window.removeEventListener('lumina-drop', handleLuminaDrop);
     }, []);
 
     return <div ref={containerRef} className={`codemirror-wrapper h-full overflow-auto ${className}`} />;

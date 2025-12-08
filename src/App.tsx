@@ -246,6 +246,70 @@ function App() {
     }
   }, [vaultPath, ragConfig.enabled, ragConfig.embeddingApiKey, initializeRAG]);
 
+  // 全局鼠标拖拽处理：模拟从文件树拖拽文件创建双链
+  useEffect(() => {
+    let dragIndicator: HTMLDivElement | null = null;
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      const dragData = (window as any).__lumina_drag_data;
+      if (!dragData) return;
+      
+      // 检测是否开始拖拽（移动超过 5px）
+      const dx = e.clientX - dragData.startX;
+      const dy = e.clientY - dragData.startY;
+      
+      if (!dragData.isDragging && Math.sqrt(dx*dx + dy*dy) > 5) {
+        dragData.isDragging = true;
+        
+        // 创建拖拽指示器
+        dragIndicator = document.createElement('div');
+        dragIndicator.className = 'fixed pointer-events-none z-[9999] px-2 py-1 bg-primary text-primary-foreground text-sm rounded shadow-lg';
+        dragIndicator.textContent = dragData.wikiLink;
+        document.body.appendChild(dragIndicator);
+      }
+      
+      if (dragData.isDragging && dragIndicator) {
+        dragIndicator.style.left = `${e.clientX + 10}px`;
+        dragIndicator.style.top = `${e.clientY + 10}px`;
+      }
+    };
+    
+    const handleMouseUp = (e: MouseEvent) => {
+      const dragData = (window as any).__lumina_drag_data;
+      if (!dragData) return;
+      
+      // 清理拖拽指示器
+      if (dragIndicator) {
+        dragIndicator.remove();
+        dragIndicator = null;
+      }
+      
+      if (dragData.isDragging) {
+        // 触发自定义事件，让编辑器处理
+        const dropEvent = new CustomEvent('lumina-drop', {
+          detail: {
+            wikiLink: dragData.wikiLink,
+            x: e.clientX,
+            y: e.clientY,
+          }
+        });
+        window.dispatchEvent(dropEvent);
+      }
+      
+      // 清理全局数据
+      (window as any).__lumina_drag_data = null;
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      if (dragIndicator) dragIndicator.remove();
+    };
+  }, []);
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

@@ -965,23 +965,37 @@ function FileTreeItem({
     return <File className="w-4 h-4 text-muted-foreground shrink-0" />;
   };
 
+  // 使用鼠标事件模拟拖拽（绑过 Tauri WebView 的 HTML5 拖拽限制）
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // 只处理左键
+    
+    const linkName = entry.name.replace(/\.(md|db\.json)$/i, '');
+    const wikiLink = `[[${linkName}]]`;
+    
+    // 存储拖拽数据到全局
+    (window as any).__lumina_drag_data = {
+      wikiLink,
+      startX: e.clientX,
+      startY: e.clientY,
+      isDragging: false,
+    };
+  };
+
   return (
     <div
-      role="button"
-      tabIndex={0}
+      onMouseDown={handleMouseDown}
       onClick={() => onSelect(entry)}
       onContextMenu={(e) => onContextMenu(e, entry)}
-      onKeyDown={(e) => e.key === "Enter" && onSelect(entry)}
       className={cn(
-        "w-full flex items-center gap-1.5 py-1.5 transition-colors text-sm cursor-pointer",
+        "w-full flex items-center gap-1.5 py-1.5 transition-colors text-sm cursor-grab select-none",
         showActive
           ? "bg-primary/10 text-primary"
           : "hover:bg-accent"
       )}
       style={{ paddingLeft: paddingLeft + 20 }}
     >
-      {getFileIcon()}
-      <span className="truncate">{getFileName(entry.name)}</span>
+      <span className="pointer-events-none">{getFileIcon()}</span>
+      <span className="truncate pointer-events-none">{getFileName(entry.name)}</span>
     </div>
   );
 }
