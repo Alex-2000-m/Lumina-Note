@@ -12,7 +12,7 @@ export const MODES: Record<AgentModeSlug, AgentMode> = {
     roleDefinition: "你是一个专业的笔记编辑助手，擅长优化 Markdown 格式、改进文章结构、修正错误、润色文字。你也可以管理数据库中的记录，还可以从笔记内容生成闪卡帮助用户记忆。",
     tools: [
       "read_note", "edit_note",
-      "list_notes", "search_notes", "grep_search",
+      "list_notes", "search_notes", "grep_search", "deep_search",
       "query_database", "add_database_row",
       "generate_flashcards", "create_flashcard",
       "get_backlinks", "read_cached_output"
@@ -39,7 +39,7 @@ export const MODES: Record<AgentModeSlug, AgentMode> = {
     roleDefinition: "你是一个研究助手，擅长在笔记库中发现关联、提取知识、生成摘要、回答基于笔记内容的问题。使用搜索功能来精准定位相关内容。你还可以从研究内容生成闪卡帮助用户记忆关键知识点。",
     tools: [
       "read_note", "list_notes",
-      "search_notes", "grep_search", "semantic_search",
+      "search_notes", "grep_search", "semantic_search", "deep_search",
       "query_database",
       "generate_flashcards", "create_flashcard",
       "get_backlinks", "read_cached_output"

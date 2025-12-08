@@ -844,6 +844,63 @@ export const generateFlashcardsDefinition: ToolDefinition = {
 3. 用 attempt_completion 报告结果`,
 };
 
+// ============ deep_search ============
+
+export const deepSearchDefinition: ToolDefinition = {
+  name: "deep_search",
+  description: "深度搜索：搜索笔记并返回完整内容，一次获取所有信息",
+  parameters: [
+    {
+      name: "query",
+      type: "string",
+      required: true,
+      description: "搜索关键词或描述",
+    },
+    {
+      name: "limit",
+      type: "number",
+      required: false,
+      description: "返回笔记数量，默认 5",
+    },
+    {
+      name: "include_content",
+      type: "boolean",
+      required: false,
+      description: "是否包含笔记内容，默认 true",
+    },
+  ],
+  definition: `## deep_search
+描述: 深度搜索笔记库。与普通搜索不同，这个工具会一次性返回搜索结果和笔记内容。
+
+**适用场景**:
+- 需要分析多个笔记的内容
+- "找关于 X 的笔记并总结"
+- 需要对比多个笔记
+
+**不适用场景**:
+- 只需要知道有哪些笔记（用 grep_search）
+- 需要精确控制读取哪些笔记（用 search + read_note）
+
+参数:
+- query: (必需) 搜索关键词或描述
+- limit: (可选) 返回笔记数量，默认 5
+- include_content: (可选) 是否包含笔记内容，默认 true
+
+用法:
+<deep_search>
+<query>React Hooks</query>
+<limit>3</limit>
+</deep_search>
+
+返回:
+- 搜索结果列表（关键词匹配 + 语义匹配）
+- 每个笔记的完整内容（截断到 2000 字符）
+
+优势:
+- 一次调用获取所有信息，无需多次往返
+- 自动合并关键词搜索和语义搜索结果`,
+};
+
 // ============ create_flashcard ============
 
 export const createFlashcardDefinition: ToolDefinition = {
@@ -978,6 +1035,7 @@ export function getAllToolDefinitions(): ToolDefinition[] {
     getBacklinksDefinition,
     generateFlashcardsDefinition,
     createFlashcardDefinition,
+    deepSearchDefinition,
   ];
 }
 

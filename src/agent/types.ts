@@ -94,6 +94,13 @@ export interface RAGSearchResult {
   heading?: string;
 }
 
+// 显式引用的笔记（从 [[wikilinks]] 解析）
+export interface ResolvedLink {
+  linkName: string;  // 原始链接名
+  filePath: string;  // 实际文件路径
+  content: string;   // 笔记内容
+}
+
 // ============ 任务上下文 ============
 
 export interface TaskContext {
@@ -105,6 +112,7 @@ export interface TaskContext {
   mode?: AgentMode;
   intent?: string; // 当前任务的意图类型
   ragResults?: RAGSearchResult[];  // RAG 自动注入的搜索结果
+  resolvedLinks?: ResolvedLink[];  // 显式引用自动注入（从 [[wikilinks]] 解析）
   displayMessage?: string;  // 用于前端显示的消息（不含文件完整内容）
 }
 

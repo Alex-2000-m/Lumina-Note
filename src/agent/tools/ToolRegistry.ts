@@ -23,6 +23,7 @@ import { AddDatabaseRowTool } from "./executors/AddDatabaseRowTool";
 import { GetBacklinksTool } from "./executors/GetBacklinksTool";
 import { GenerateFlashcardsTool, CreateFlashcardTool } from "./executors/GenerateFlashcardsTool";
 import { ReadCachedOutputTool } from "./executors/ReadCachedOutputTool";
+import { DeepSearchTool } from "./executors/DeepSearchTool";
 
 export class ToolRegistry {
   private tools: Map<string, ToolExecutor> = new Map();
@@ -61,6 +62,9 @@ export class ToolRegistry {
     // 闪卡工具
     this.register(GenerateFlashcardsTool);
     this.register(CreateFlashcardTool);
+    
+    // 复合工具（减少 LLM 往返）
+    this.register(DeepSearchTool);
   }
 
   /**

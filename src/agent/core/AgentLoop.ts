@@ -16,7 +16,8 @@ import {
   AgentEventType,
   LLMResponse,
   RAGSearchResult,
-  LLMConfig
+  LLMConfig,
+  ResolvedLink
 } from "../types";
 import { StateManager } from "./StateManager";
 import { parseResponse, formatToolResult, getNoToolUsedPrompt } from "./MessageParser";
@@ -24,6 +25,8 @@ import { PromptBuilder } from "../prompts/PromptBuilder";
 import { ToolRegistry } from "../tools/ToolRegistry";
 import { callLLM } from "../providers";
 import { useRAGStore } from "@/stores/useRAGStore";
+import { useNoteIndexStore, extractWikiLinks } from "@/stores/useNoteIndexStore";
+import { readFile } from "@/lib/tauri";
 import { getToolSchemas } from "../tools/schemas";
 import { cacheToolOutput } from "./ToolOutputCache";
 
@@ -67,8 +70,11 @@ export class AgentLoop {
     this.stateManager.setLLMConfig(configOverride);
     this.abortController = new AbortController();
 
-    // RAG 自动注入：搜索相关笔记
-    const enrichedContext = await this.enrichContextWithRAG(userMessage, context);
+    // 1. 显式引用解析：从用户消息和当前笔记中提取 [[wikilinks]] 并读取内容
+    let enrichedContext = await this.resolveWikiLinks(userMessage, context);
+
+    // 2. RAG 自动注入：搜索相关笔记（排除已解析的显式引用）
+    enrichedContext = await this.enrichContextWithRAG(userMessage, enrichedContext);
 
     // 构建消息
     const systemPrompt = this.promptBuilder.build(enrichedContext);
@@ -546,6 +552,79 @@ export class AgentLoop {
   }
 
   /**
+   * 显式引用解析：从用户消息和当前笔记中提取 [[wikilinks]] 并读取内容
+   * "顺藤摸瓜" 策略 - 用户显式写了 [[link]]，就一定要把它加载进来
+   */
+  private async resolveWikiLinks(userMessage: string, context: TaskContext): Promise<TaskContext> {
+    try {
+      // 从用户消息和当前笔记内容中提取所有 [[wikilinks]]
+      const linksFromMessage = extractWikiLinks(userMessage);
+      const linksFromNote = context.activeNoteContent 
+        ? extractWikiLinks(context.activeNoteContent) 
+        : [];
+      
+      // 合并去重
+      const allLinks = [...new Set([...linksFromMessage, ...linksFromNote])];
+      
+      if (allLinks.length === 0) {
+        return context;
+      }
+
+      console.log(`[Agent] 显式引用解析: 发现 ${allLinks.length} 个 wikilinks:`, allLinks);
+
+      // 获取笔记索引，用于将链接名解析为文件路径
+      const noteIndex = useNoteIndexStore.getState().noteIndex;
+      
+      // 构建 name -> path 映射
+      const nameToPath = new Map<string, string>();
+      noteIndex.forEach((note) => {
+        nameToPath.set(note.name.toLowerCase(), note.path);
+      });
+
+      // 解析每个链接
+      const resolvedLinks: ResolvedLink[] = [];
+      const resolvedPaths = new Set<string>(); // 用于去重
+
+      // 排除当前打开的笔记
+      if (context.activeNote) {
+        resolvedPaths.add(context.activeNote);
+      }
+
+      for (const linkName of allLinks) {
+        const filePath = nameToPath.get(linkName.toLowerCase());
+        
+        if (!filePath || resolvedPaths.has(filePath)) {
+          continue;
+        }
+
+        try {
+          const content = await readFile(filePath);
+          resolvedLinks.push({
+            linkName,
+            filePath,
+            content,
+          });
+          resolvedPaths.add(filePath);
+        } catch (e) {
+          console.warn(`[Agent] 无法读取引用笔记: ${linkName} (${filePath})`, e);
+        }
+      }
+
+      if (resolvedLinks.length > 0) {
+        console.log(`[Agent] 显式引用注入: 成功解析 ${resolvedLinks.length} 个笔记`);
+      }
+
+      return {
+        ...context,
+        resolvedLinks,
+      };
+    } catch (error) {
+      console.error("[Agent] 显式引用解析失败:", error);
+      return context;
+    }
+  }
+
+  /**
    * RAG 自动注入：搜索相关笔记并增强上下文
    */
   private async enrichContextWithRAG(userMessage: string, context: TaskContext): Promise<TaskContext> {
@@ -571,9 +650,14 @@ export class AgentLoop {
         return context;
       }
 
-      // 转换为 RAGSearchResult 格式，确保字段有效
+      // 获取已解析的显式引用路径，用于去重
+      const resolvedPaths = new Set(
+        (context.resolvedLinks || []).map(l => l.filePath)
+      );
+
+      // 转换为 RAGSearchResult 格式，确保字段有效，并排除已解析的显式引用
       const ragResults: RAGSearchResult[] = results
-        .filter(r => r.filePath && r.content) // 过滤无效结果
+        .filter(r => r.filePath && r.content && !resolvedPaths.has(r.filePath))
         .map(r => ({
           filePath: r.filePath || "未知文件",
           content: r.content || "",
@@ -581,7 +665,7 @@ export class AgentLoop {
           heading: r.heading || undefined,
         }));
 
-      console.log(`[Agent] RAG 自动注入: 找到 ${ragResults.length} 个相关笔记`);
+      console.log(`[Agent] RAG 自动注入: 找到 ${ragResults.length} 个相关笔记 (已排除显式引用)`);
 
       return {
         ...context,
@@ -604,10 +688,23 @@ export class AgentLoop {
       content += `\n\n<current_note path="${context.activeNote}">\n${context.activeNoteContent}\n</current_note>`;
     }
 
+    // 显式引用注入：用户在消息或笔记中写了 [[link]]，优先级最高
+    if (context.resolvedLinks && context.resolvedLinks.length > 0) {
+      content += `\n\n<referenced_notes hint="用户显式引用的笔记，务必参考">`;
+      context.resolvedLinks.forEach((link, i) => {
+        // 显式引用给更多内容（最多 1500 字符），因为用户明确想要这些
+        const preview = link.content.length > 1500 
+          ? link.content.slice(0, 1500) + "..." 
+          : link.content;
+        content += `\n\n### ${i + 1}. [[${link.linkName}]] → ${link.filePath}\n${preview}`;
+      });
+      content += `\n</referenced_notes>`;
+    }
+
     // RAG 自动注入：添加 top 3 相关笔记的详细内容
     if (context.ragResults && context.ragResults.length > 0) {
       const topResults = context.ragResults.slice(0, 3);
-      content += `\n\n<related_notes hint="以下是与任务相关的笔记内容，可供参考">`;
+      content += `\n\n<related_notes hint="以下是语义搜索找到的相关笔记，可供参考">`;
       topResults.forEach((r, i) => {
         const preview = r.content.length > 600 ? r.content.slice(0, 600) + "..." : r.content;
         content += `\n\n### ${i + 1}. ${r.filePath} (相关度: ${(r.score * 100).toFixed(0)}%)${r.heading ? ` - ${r.heading}` : ""}\n${preview}`;
