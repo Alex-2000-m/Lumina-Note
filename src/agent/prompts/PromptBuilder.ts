@@ -24,6 +24,11 @@ export class PromptBuilder {
    */
   build(context: TaskContext): string {
     const mode = context.mode || this.mode;
+    
+    // 根据实际使用的 mode 重新构建工具列表，确保 tools 和 mode 同步
+    if (mode !== this.mode) {
+      this.tools = this.buildToolList(mode);
+    }
 
     return `${this.getRoleDefinition(mode)}
 
@@ -71,6 +76,12 @@ ${mode.roleDefinition}
   }
 
   private getToolUseSection(): string {
+    // 动态生成工具名列表，不再硬编码
+    const toolNames = this.tools
+      .map(t => t.name)
+      .filter(name => !["attempt_completion", "ask_user", "read_cached_output"].includes(name))
+      .join(", ");
+
     return `====
 
 TOOL USE
@@ -129,7 +140,7 @@ TOOL USE
 - 闪卡会自动保存到 Flashcards/ 目录
 
 ✅ **唯一合法的业务工具名**（只能使用这些对笔记/数据库产生实际操作）：
-read_note, edit_note, create_note, delete_note, list_notes, move_note, search_notes, grep_search, semantic_search, deep_search, query_database, add_database_row, get_backlinks, generate_flashcards, create_flashcard
+${toolNames}
 
 此外还有两类**协议动作**（非业务工具，无副作用），只用于对话包装：
 - ask_user：在信息不足时向用户询问或确认，必须用 <ask_user>…</ask_user> 格式提问；提问后应停止执行并等待用户回复，不要自行编造答案继续。
