@@ -8,6 +8,8 @@ import { useLocaleStore } from "@/stores/useLocaleStore";
 import { parseLuminaLink } from "@/lib/annotations";
 import { writeBinaryFile, readBinaryFileBase64 } from "@/lib/tauri";
 import { EditorState, StateField, StateEffect, Compartment, Facet } from "@codemirror/state";
+import { slashCommandExtensions, placeholderExtension } from "./extensions/slashCommand";
+import { SlashMenu } from "./components/SlashMenu";
 import {
   EditorView,
   keymap,
@@ -886,7 +888,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
           voicePreviewField,
           markdownStylePlugin,
           imageInfoField,
-          
+          // Slash Command 扩展
+          ...slashCommandExtensions,
+          placeholderExtension("开始输入，或按 / 唤起命令..."),
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !isExternalChange.current) {
               const newContent = update.state.doc.toString();
@@ -1191,7 +1195,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       return () => window.removeEventListener('lumina-drop', handleLuminaDrop);
     }, []);
 
-    return <div ref={containerRef} className={`codemirror-wrapper h-full overflow-auto ${className}`} />;
+    return (
+      <>
+        <div ref={containerRef} className={`codemirror-wrapper h-full overflow-auto ${className}`} />
+        <SlashMenu view={viewRef.current} />
+      </>
+    );
   }
 );
 
