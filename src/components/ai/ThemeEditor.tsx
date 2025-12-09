@@ -48,39 +48,6 @@ const COLOR_GROUP_KEYS = [
   }
 ];
 
-// 颜色键的中文名称
-const COLOR_LABELS: Record<string, string> = {
-  background: '背景',
-  foreground: '前景文字',
-  muted: '次要背景',
-  mutedForeground: '次要文字',
-  accent: '强调背景',
-  accentForeground: '强调文字',
-  primary: '主色',
-  primaryForeground: '主色文字',
-  border: '边框',
-  heading: '标题',
-  link: '链接',
-  linkHover: '链接悬浮',
-  code: '行内代码',
-  codeBg: '行内代码背景',
-  codeBlock: '代码块文字',
-  codeBlockBg: '代码块背景',
-  blockquote: '引用文字',
-  blockquoteBorder: '引用边框',
-  hr: '分割线',
-  tableBorder: '表格边框',
-  tableHeaderBg: '表头背景',
-  bold: '粗体',
-  italic: '斜体',
-  listMarker: '列表标记',
-  highlight: '高亮背景',
-  tag: '标签',
-  diffAddBg: '新增背景',
-  diffAddText: '新增文字',
-  diffRemoveBg: '删除背景',
-  diffRemoveText: '删除文字'
-};
 
 // HSL 字符串转换为 CSS hsl() 格式
 function hslToCSS(hsl: string): string {

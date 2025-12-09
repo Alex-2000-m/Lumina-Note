@@ -330,7 +330,7 @@ const CardFront: React.FC<{ card: Flashcard; clozeIndex: number; t: any }> = ({
 const CardBack: React.FC<{ card: Flashcard; clozeIndex: number; t: any }> = ({ 
   card, 
   clozeIndex,
-  t 
+  t: _t 
 }) => {
   if (card.type === 'basic' || card.type === 'basic-reversed') {
     return (
