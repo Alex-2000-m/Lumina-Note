@@ -30,8 +30,14 @@ export function parseResponse(content: string): ParsedResponse {
     const toolContent = match[2];
     const raw = match[0];
 
-    // 跳过非工具标签 (如 thinking, description 等)
-    const nonToolTags = ["thinking", "description", "original", "modified", "edit"];
+    // 跳过非工具标签 (如 thinking, description 等) 和常见 HTML 标签
+    const nonToolTags = [
+      "thinking", "description", "original", "modified", "edit",
+      // HTML 标签
+      "i", "b", "u", "s", "em", "strong", "code", "pre", "p", "br", "hr",
+      "div", "span", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6",
+      "table", "tr", "td", "th", "thead", "tbody", "blockquote", "img", "sup", "sub",
+    ];
     if (nonToolTags.includes(toolName.toLowerCase())) {
       continue;
     }

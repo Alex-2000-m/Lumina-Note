@@ -759,7 +759,7 @@ export default {
 6. "flashcard": フラッシュカードの生成、復習用の知識ポイントの抽出
 7. "complex": マルチステップタスク、コーディング、推論、深い分析が必要なリクエスト
 
-JSONのみを出力：{"type": "intent_type", "confidence": 0.0-1.0, "reasoning": "簡単な説明"}`,
+JSONのみを出力：{"type": "<chat|search|create|edit|organize|flashcard|complex>", "confidence": 0.0-1.0, "reasoning": "簡単な説明"}`,
     },
 
     // クエリ書き換えプロンプト

@@ -760,7 +760,7 @@ export default {
 6. "flashcard": 请求生成闪卡、制作记忆卡片、从内容提取知识点用于复习、Anki 卡片。
 7. "complex": 多步骤任务、编码、推理或需要深度分析的请求。
 
-仅输出 JSON：{"type": "intent_type", "confidence": 0.0-1.0, "reasoning": "简短说明"}`,
+仅输出 JSON：{"type": "<chat|search|create|edit|organize|flashcard|complex>", "confidence": 0.0-1.0, "reasoning": "简短说明"}`,
     },
 
     // 查询改写提示词

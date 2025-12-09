@@ -760,7 +760,7 @@ Important notes:
 6. "flashcard": Requesting to generate flashcards, create memory cards, extract knowledge points for review, Anki cards.
 7. "complex": Multi-step tasks, coding, reasoning, or requests requiring deep analysis.
 
-Output only JSON: {"type": "intent_type", "confidence": 0.0-1.0, "reasoning": "brief explanation"}`,
+Output only JSON: {"type": "<chat|search|create|edit|organize|flashcard|complex>", "confidence": 0.0-1.0, "reasoning": "brief explanation"}`,
     },
 
     // Query rewriter prompts
