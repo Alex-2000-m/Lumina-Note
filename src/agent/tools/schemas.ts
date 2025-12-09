@@ -1,7 +1,10 @@
 /**
  * 工具 JSON Schema 定义
  * 用于原生 Function Calling 模式
+ * 支持多语言国际化
  */
+
+import { getCurrentTranslations } from "@/stores/useLocaleStore";
 
 export interface FunctionSchema {
   type: "function";
@@ -21,454 +24,89 @@ export interface FunctionSchema {
   };
 }
 
-/**
- * 所有工具的 JSON Schema
- */
-export const TOOL_SCHEMAS: FunctionSchema[] = [
-  {
-    type: "function",
-    function: {
-      name: "read_note",
-      description: "读取笔记文件的内容，返回带行号的内容",
-      parameters: {
-        type: "object",
-        properties: {
-          path: {
-            type: "string",
-            description: "笔记路径，相对于笔记库根目录",
-          },
-        },
-        required: ["path"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "edit_note",
-      description: "对笔记进行精确的查找替换修改，可选重命名文件",
-      parameters: {
-        type: "object",
-        properties: {
-          path: {
-            type: "string",
-            description: "要编辑的笔记路径",
-          },
-          edits: {
-            type: "array",
-            description: "编辑操作数组，每个操作包含 search 和 replace 字段",
-            items: { type: "object" },
-          },
-          new_name: {
-            type: "string",
-            description: "新文件名（可选），不包含路径，仅文件名",
-          },
-        },
-        required: ["path", "edits"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "create_note",
-      description: "创建新的笔记文件",
-      parameters: {
-        type: "object",
-        properties: {
-          path: {
-            type: "string",
-            description: "笔记路径，相对于笔记库根目录",
-          },
-          content: {
-            type: "string",
-            description: "完整的笔记内容",
-          },
-        },
-        required: ["path", "content"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_notes",
-      description: "列出指定目录下的笔记文件和子目录",
-      parameters: {
-        type: "object",
-        properties: {
-          directory: {
-            type: "string",
-            description: "目录路径，相对于笔记库根目录，默认为根目录",
-          },
-          recursive: {
-            type: "boolean",
-            description: "是否递归列出子目录内容，默认 true",
-          },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "create_folder",
-      description: "创建新的目录",
-      parameters: {
-        type: "object",
-        properties: {
-          path: {
-            type: "string",
-            description: "目录路径，相对于笔记库根目录",
-          },
-        },
-        required: ["path"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "move_file",
-      description: "移动文件到新位置",
-      parameters: {
-        type: "object",
-        properties: {
-          from: {
-            type: "string",
-            description: "源文件路径",
-          },
-          to: {
-            type: "string",
-            description: "目标文件路径",
-          },
-        },
-        required: ["from", "to"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "rename_file",
-      description: "重命名文件或文件夹",
-      parameters: {
-        type: "object",
-        properties: {
-          path: {
-            type: "string",
-            description: "原文件路径",
-          },
-          new_name: {
-            type: "string",
-            description: "新名称（不含路径）",
-          },
-        },
-        required: ["path", "new_name"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "delete_note",
-      description: "删除指定的笔记文件（移到回收站）",
-      parameters: {
-        type: "object",
-        properties: {
-          path: {
-            type: "string",
-            description: "要删除的笔记路径",
-          },
-        },
-        required: ["path"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "search_notes",
-      description: "语义搜索笔记库，基于内容相似性找到相关笔记",
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "搜索查询，用自然语言描述",
-          },
-          directory: {
-            type: "string",
-            description: "限定搜索范围的目录",
-          },
-          limit: {
-            type: "number",
-            description: "返回结果数量，默认 10",
-          },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "grep_search",
-      description: "全文搜索笔记库，支持正则表达式",
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "搜索关键词或正则表达式",
-          },
-          directory: {
-            type: "string",
-            description: "限定搜索范围的目录",
-          },
-          regex: {
-            type: "boolean",
-            description: "是否启用正则表达式模式",
-          },
-          case_sensitive: {
-            type: "boolean",
-            description: "是否区分大小写",
-          },
-          limit: {
-            type: "number",
-            description: "返回结果数量上限",
-          },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "semantic_search",
-      description: "使用 AI 嵌入进行语义搜索",
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "自然语言查询",
-          },
-          directory: {
-            type: "string",
-            description: "限定搜索范围的目录",
-          },
-          limit: {
-            type: "number",
-            description: "返回结果数量",
-          },
-          min_score: {
-            type: "number",
-            description: "最低相似度分数 (0-1)",
-          },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "query_database",
-      description: "查询数据库结构和行数据",
-      parameters: {
-        type: "object",
-        properties: {
-          database_id: {
-            type: "string",
-            description: "数据库 ID",
-          },
-          filter_column: {
-            type: "string",
-            description: "过滤列名",
-          },
-          filter_value: {
-            type: "string",
-            description: "过滤值",
-          },
-          limit: {
-            type: "number",
-            description: "返回行数上限",
-          },
-        },
-        required: ["database_id"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "add_database_row",
-      description: "向数据库添加新行",
-      parameters: {
-        type: "object",
-        properties: {
-          database_id: {
-            type: "string",
-            description: "数据库 ID",
-          },
-          cells: {
-            type: "object",
-            description: "单元格值，键为列名",
-          },
-        },
-        required: ["database_id"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_backlinks",
-      description: "获取链接到指定笔记的所有笔记（反向链接）",
-      parameters: {
-        type: "object",
-        properties: {
-          note_name: {
-            type: "string",
-            description: "笔记名称（不含 .md 后缀）",
-          },
-          include_context: {
-            type: "boolean",
-            description: "是否包含链接上下文",
-          },
-        },
-        required: ["note_name"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "generate_flashcards",
-      description: "从笔记内容生成闪卡（支持问答、填空、选择题等类型）",
-      parameters: {
-        type: "object",
-        properties: {
-          content: {
-            type: "string",
-            description: "要生成闪卡的源内容",
-          },
-          source_note: {
-            type: "string",
-            description: "来源笔记路径（可选）",
-          },
-          deck: {
-            type: "string",
-            description: "目标牌组名称，默认 Default",
-          },
-          types: {
-            type: "array",
-            description: "要生成的卡片类型：basic/cloze/basic-reversed/mcq/list",
-            items: { type: "string" },
-          },
-          count: {
-            type: "number",
-            description: "生成数量，默认 5",
-          },
-          language: {
-            type: "string",
-            description: "语言：zh/en",
-          },
-        },
-        required: ["content"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "create_flashcard",
-      description: "创建一张闪卡",
-      parameters: {
-        type: "object",
-        properties: {
-          type: {
-            type: "string",
-            description: "卡片类型：basic/cloze/basic-reversed/mcq/list",
-            enum: ["basic", "cloze", "basic-reversed", "mcq", "list"],
-          },
-          deck: {
-            type: "string",
-            description: "牌组名称",
-          },
-          source: {
-            type: "string",
-            description: "来源笔记链接 [[note]]",
-          },
-          front: {
-            type: "string",
-            description: "问题/正面（basic/basic-reversed）",
-          },
-          back: {
-            type: "string",
-            description: "答案/背面（basic/basic-reversed）",
-          },
-          text: {
-            type: "string",
-            description: "填空文本，使用 {{c1::答案}} 格式（cloze）",
-          },
-          question: {
-            type: "string",
-            description: "问题（mcq/list）",
-          },
-          options: {
-            type: "array",
-            description: "选项列表（mcq）",
-            items: { type: "string" },
-          },
-          answer: {
-            type: "number",
-            description: "正确答案索引 0-based（mcq）",
-          },
-          items: {
-            type: "array",
-            description: "列表项（list）",
-            items: { type: "string" },
-          },
-          ordered: {
-            type: "boolean",
-            description: "是否需要按顺序（list）",
-          },
-          explanation: {
-            type: "string",
-            description: "解释说明（可选）",
-          },
-        },
-        required: ["type"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "read_cached_output",
-      description: "读取此前缓存的工具长输出全文",
-      parameters: {
-        type: "object",
-        properties: {
-          id: {
-            type: "string",
-            description: "cache_id（来自长输出摘要提示）",
-          },
-        },
-        required: ["id"],
-      },
-    },
-  },
+// 工具参数的基础结构（不含描述）
+interface ParamDef {
+  type: string;
+  enum?: string[];
+  items?: { type: string };
+}
+
+interface ToolDef {
+  name: string;
+  params: Record<string, ParamDef>;
+  required?: string[];
+}
+
+// 工具基础定义
+const TOOL_DEFS: ToolDef[] = [
+  { name: "read_note", params: { path: { type: "string" } }, required: ["path"] },
+  { name: "edit_note", params: { path: { type: "string" }, edits: { type: "array", items: { type: "object" } }, new_name: { type: "string" } }, required: ["path", "edits"] },
+  { name: "create_note", params: { path: { type: "string" }, content: { type: "string" } }, required: ["path", "content"] },
+  { name: "list_notes", params: { directory: { type: "string" }, recursive: { type: "boolean" } } },
+  { name: "create_folder", params: { path: { type: "string" } }, required: ["path"] },
+  { name: "move_file", params: { from: { type: "string" }, to: { type: "string" } }, required: ["from", "to"] },
+  { name: "rename_file", params: { path: { type: "string" }, new_name: { type: "string" } }, required: ["path", "new_name"] },
+  { name: "delete_note", params: { path: { type: "string" } }, required: ["path"] },
+  { name: "search_notes", params: { query: { type: "string" }, directory: { type: "string" }, limit: { type: "number" } }, required: ["query"] },
+  { name: "grep_search", params: { query: { type: "string" }, directory: { type: "string" }, regex: { type: "boolean" }, case_sensitive: { type: "boolean" }, limit: { type: "number" } }, required: ["query"] },
+  { name: "semantic_search", params: { query: { type: "string" }, directory: { type: "string" }, limit: { type: "number" }, min_score: { type: "number" } }, required: ["query"] },
+  { name: "deep_search", params: { query: { type: "string" }, limit: { type: "number" }, include_content: { type: "boolean" } }, required: ["query"] },
+  { name: "query_database", params: { database_id: { type: "string" }, filter_column: { type: "string" }, filter_value: { type: "string" }, limit: { type: "number" } }, required: ["database_id"] },
+  { name: "add_database_row", params: { database_id: { type: "string" }, cells: { type: "object" } }, required: ["database_id"] },
+  { name: "get_backlinks", params: { note_name: { type: "string" }, include_context: { type: "boolean" } }, required: ["note_name"] },
+  { name: "generate_flashcards", params: { content: { type: "string" }, source_note: { type: "string" }, deck: { type: "string" }, types: { type: "array", items: { type: "string" } }, count: { type: "number" }, language: { type: "string" } }, required: ["content"] },
+  { name: "create_flashcard", params: { type: { type: "string", enum: ["basic", "cloze", "basic-reversed", "mcq", "list"] }, deck: { type: "string" }, source: { type: "string" }, front: { type: "string" }, back: { type: "string" }, text: { type: "string" }, question: { type: "string" }, options: { type: "array", items: { type: "string" } }, answer: { type: "number" }, items: { type: "array", items: { type: "string" } }, ordered: { type: "boolean" }, explanation: { type: "string" } }, required: ["type"] },
+  { name: "read_cached_output", params: { id: { type: "string" } }, required: ["id"] },
 ];
 
 /**
- * 根据模式过滤工具
+ * 动态生成本地化的工具 Schema
+ */
+function buildLocalizedSchemas(): FunctionSchema[] {
+  const t = getCurrentTranslations().prompts.fcSchemas;
+  
+  return TOOL_DEFS.map(tool => {
+    const toolT = t[tool.name as keyof typeof t] as { desc: string; params: Record<string, string> } | undefined;
+    
+    const properties: Record<string, { type: string; description: string; enum?: string[]; items?: { type: string } }> = {};
+    
+    for (const [paramName, paramDef] of Object.entries(tool.params)) {
+      properties[paramName] = {
+        type: paramDef.type,
+        description: toolT?.params?.[paramName] || paramName,
+        ...(paramDef.enum && { enum: paramDef.enum }),
+        ...(paramDef.items && { items: paramDef.items }),
+      };
+    }
+    
+    return {
+      type: "function" as const,
+      function: {
+        name: tool.name,
+        description: toolT?.desc || tool.name,
+        parameters: {
+          type: "object" as const,
+          properties,
+          ...(tool.required && { required: tool.required }),
+        },
+      },
+    };
+  });
+}
+
+/**
+ * 根据模式过滤工具并返回本地化的 Schema
  */
 export function getToolSchemas(toolNames: string[]): FunctionSchema[] {
-  return TOOL_SCHEMAS.filter((schema) =>
+  const allSchemas = buildLocalizedSchemas();
+  return allSchemas.filter((schema) =>
     toolNames.includes(schema.function.name)
   );
+}
+
+/**
+ * 获取所有工具的本地化 Schema
+ */
+export function getAllToolSchemas(): FunctionSchema[] {
+  return buildLocalizedSchemas();
 }

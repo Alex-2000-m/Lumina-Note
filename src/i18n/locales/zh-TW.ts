@@ -1192,5 +1192,27 @@ export default {
       relevance: '相關度',
       systemError: '❌ 系統錯誤: {message}。\n\n請使用 <thinking> 標籤分析錯誤原因，並嘗試修復或使用替代方案。',
     },
+
+    // Function Calling Schema 描述
+    fcSchemas: {
+      read_note: { desc: '讀取筆記檔案的內容，傳回帶行號的內容', params: { path: '筆記路徑，相對於筆記庫根目錄' } },
+      edit_note: { desc: '對筆記進行精確的尋找取代修改，可選重新命名檔案', params: { path: '要編輯的筆記路徑', edits: '編輯操作陣列，每個操作包含 search 和 replace 欄位', new_name: '新檔名（可選），不包含路徑，僅檔名' } },
+      create_note: { desc: '建立新的筆記檔案', params: { path: '筆記路徑，相對於筆記庫根目錄', content: '完整的筆記內容' } },
+      list_notes: { desc: '列出指定目錄下的筆記檔案和子目錄', params: { directory: '目錄路徑，相對於筆記庫根目錄，預設為根目錄', recursive: '是否遞迴列出子目錄內容，預設 true' } },
+      create_folder: { desc: '建立新的目錄', params: { path: '目錄路徑，相對於筆記庫根目錄' } },
+      move_file: { desc: '移動檔案到新位置', params: { from: '來源檔案路徑', to: '目標檔案路徑' } },
+      rename_file: { desc: '重新命名檔案或資料夾', params: { path: '原檔案路徑', new_name: '新名稱（不含路徑）' } },
+      delete_note: { desc: '刪除指定的筆記檔案（移到資源回收筒）', params: { path: '要刪除的筆記路徑' } },
+      search_notes: { desc: '語意搜尋筆記庫，基於內容相似性找到相關筆記', params: { query: '搜尋查詢，用自然語言描述', directory: '限定搜尋範圍的目錄', limit: '傳回結果數量，預設 10' } },
+      grep_search: { desc: '全文搜尋筆記庫，支援正規表示式', params: { query: '搜尋關鍵字或正規表示式', directory: '限定搜尋範圍的目錄', regex: '是否啟用正規表示式模式', case_sensitive: '是否區分大小寫', limit: '傳回結果數量上限' } },
+      semantic_search: { desc: '使用 AI 嵌入進行語意搜尋', params: { query: '自然語言查詢', directory: '限定搜尋範圍的目錄', limit: '傳回結果數量', min_score: '最低相似度分數 (0-1)' } },
+      deep_search: { desc: '深度搜尋並傳回筆記內容', params: { query: '搜尋關鍵字', limit: '傳回數量', include_content: '是否包含內容' } },
+      query_database: { desc: '查詢資料庫結構和列資料', params: { database_id: '資料庫 ID', filter_column: '過濾欄位名', filter_value: '過濾值', limit: '傳回列數上限' } },
+      add_database_row: { desc: '向資料庫新增列', params: { database_id: '資料庫 ID', cells: '儲存格值，鍵為欄位名' } },
+      get_backlinks: { desc: '取得連結到指定筆記的所有筆記（反向連結）', params: { note_name: '筆記名稱（不含 .md 後綴）', include_context: '是否包含連結上下文' } },
+      generate_flashcards: { desc: '從筆記內容產生閃卡（支援問答、填空、選擇題等類型）', params: { content: '要產生閃卡的來源內容', source_note: '來源筆記路徑（可選）', deck: '目標牌組名稱，預設 Default', types: '要產生的卡片類型：basic/cloze/basic-reversed/mcq/list', count: '產生數量，預設 5', language: '語言：zh/en' } },
+      create_flashcard: { desc: '建立一張閃卡', params: { type: '卡片類型：basic/cloze/basic-reversed/mcq/list', deck: '牌組名稱', source: '來源筆記連結 [[note]]', front: '問題/正面（basic/basic-reversed）', back: '答案/背面（basic/basic-reversed）', text: '填空文字，使用 {{c1::答案}} 格式（cloze）', question: '問題（mcq/list）', options: '選項清單（mcq）', answer: '正確答案索引 0-based（mcq）', items: '清單項（list）', ordered: '是否需要按順序（list）', explanation: '解釋說明（可選）' } },
+      read_cached_output: { desc: '讀取此前快取的工具長輸出全文', params: { id: 'cache_id（來自長輸出摘要提示）' } },
+    },
   },
 };

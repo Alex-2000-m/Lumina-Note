@@ -1119,5 +1119,27 @@ XMLタグ形式を使用してツールを呼び出します：
       relevance: '関連度',
       systemError: '❌ システムエラー: {message}。\n\n<thinking>タグを使用してエラーを分析し、修正または代替案を試してください。',
     },
+
+    // Function Calling Schema 説明
+    fcSchemas: {
+      read_note: { desc: 'ノートファイルの内容を読み取り、行番号付きで返す', params: { path: 'ノートパス、ボールトルートからの相対パス' } },
+      edit_note: { desc: 'ノートの検索置換編集、オプションでファイル名変更', params: { path: '編集するノートパス', edits: '編集操作の配列、各操作に search と replace フィールド', new_name: '新しいファイル名（オプション）、パスなし、ファイル名のみ' } },
+      create_note: { desc: '新しいノートファイルを作成', params: { path: 'ノートパス、ボールトルートからの相対パス', content: '完全なノート内容' } },
+      list_notes: { desc: '指定ディレクトリ内のノートファイルとサブディレクトリを一覧', params: { directory: 'ディレクトリパス、ボールトルートからの相対パス、デフォルトはルート', recursive: 'サブディレクトリを再帰的に一覧するか、デフォルト true' } },
+      create_folder: { desc: '新しいディレクトリを作成', params: { path: 'ディレクトリパス、ボールトルートからの相対パス' } },
+      move_file: { desc: 'ファイルを新しい場所に移動', params: { from: 'ソースファイルパス', to: 'ターゲットファイルパス' } },
+      rename_file: { desc: 'ファイルまたはフォルダの名前を変更', params: { path: '元のファイルパス', new_name: '新しい名前（パスなし）' } },
+      delete_note: { desc: '指定したノートファイルを削除（ゴミ箱に移動）', params: { path: '削除するノートパス' } },
+      search_notes: { desc: 'ボールトのセマンティック検索、内容の類似性に基づいて関連ノートを検索', params: { query: '自然言語での検索クエリ', directory: '検索範囲を制限するディレクトリ', limit: '結果数、デフォルト 10' } },
+      grep_search: { desc: 'ボールトの全文検索、正規表現対応', params: { query: '検索キーワードまたは正規表現', directory: '検索範囲を制限するディレクトリ', regex: '正規表現モードを有効にするか', case_sensitive: '大文字小文字を区別するか', limit: '最大結果数' } },
+      semantic_search: { desc: 'AI埋め込みを使用したセマンティック検索', params: { query: '自然言語クエリ', directory: '検索範囲を制限するディレクトリ', limit: '結果数', min_score: '最小類似度スコア (0-1)' } },
+      deep_search: { desc: 'ディープ検索してノート内容を返す', params: { query: '検索キーワード', limit: '結果数', include_content: '内容を含めるか' } },
+      query_database: { desc: 'データベース構造と行データをクエリ', params: { database_id: 'データベース ID', filter_column: 'フィルター列名', filter_value: 'フィルター値', limit: '最大行数' } },
+      add_database_row: { desc: 'データベースに新しい行を追加', params: { database_id: 'データベース ID', cells: 'セル値、キーは列名' } },
+      get_backlinks: { desc: '指定ノートにリンクしているすべてのノートを取得（バックリンク）', params: { note_name: 'ノート名（.md サフィックスなし）', include_context: 'リンクコンテキストを含めるか' } },
+      generate_flashcards: { desc: 'ノート内容からフラッシュカードを生成（Q&A、穴埋め、MCQなど対応）', params: { content: 'フラッシュカード生成のソース内容', source_note: 'ソースノートパス（オプション）', deck: 'ターゲットデッキ名、デフォルト Default', types: '生成するカードタイプ：basic/cloze/basic-reversed/mcq/list', count: '生成数、デフォルト 5', language: '言語：zh/en' } },
+      create_flashcard: { desc: 'フラッシュカードを1枚作成', params: { type: 'カードタイプ：basic/cloze/basic-reversed/mcq/list', deck: 'デッキ名', source: 'ソースノートリンク [[note]]', front: '質問/表（basic/basic-reversed）', back: '回答/裏（basic/basic-reversed）', text: '穴埋めテキスト、{{c1::答え}} 形式を使用（cloze）', question: '質問（mcq/list）', options: 'オプションリスト（mcq）', answer: '正解インデックス 0-based（mcq）', items: 'リスト項目（list）', ordered: '順序が必要か（list）', explanation: '説明（オプション）' } },
+      read_cached_output: { desc: '以前にキャッシュされたツールの長い出力を読み取る', params: { id: 'cache_id（長い出力の要約ヒントから）' } },
+    },
   },
 };

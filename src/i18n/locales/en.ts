@@ -1329,5 +1329,27 @@ Parameters:
       relevance: 'Relevance',
       systemError: '❌ System error: {message}.\n\nPlease use <thinking> tag to analyze the error and try to fix or use alternatives.',
     },
+
+    // Function Calling Schema descriptions
+    fcSchemas: {
+      read_note: { desc: 'Read note file content, returns content with line numbers', params: { path: 'Note path, relative to vault root' } },
+      edit_note: { desc: 'Precisely find and replace content in note, optionally rename file', params: { path: 'Note path to edit', edits: 'Array of edit operations, each with search and replace fields', new_name: 'New filename (optional), without path, filename only' } },
+      create_note: { desc: 'Create a new note file', params: { path: 'Note path, relative to vault root', content: 'Complete note content' } },
+      list_notes: { desc: 'List note files and subdirectories in specified directory', params: { directory: 'Directory path, relative to vault root, defaults to root', recursive: 'Whether to recursively list subdirectory contents, default true' } },
+      create_folder: { desc: 'Create a new directory', params: { path: 'Directory path, relative to vault root' } },
+      move_file: { desc: 'Move file to new location', params: { from: 'Source file path', to: 'Target file path' } },
+      rename_file: { desc: 'Rename file or folder', params: { path: 'Original file path', new_name: 'New name (without path)' } },
+      delete_note: { desc: 'Delete specified note file (move to trash)', params: { path: 'Note path to delete' } },
+      search_notes: { desc: 'Semantic search vault, find related notes based on content similarity', params: { query: 'Search query in natural language', directory: 'Limit search scope to directory', limit: 'Number of results, default 10' } },
+      grep_search: { desc: 'Full-text search vault, supports regex', params: { query: 'Search keyword or regex', directory: 'Limit search scope to directory', regex: 'Enable regex mode', case_sensitive: 'Case sensitive search', limit: 'Max number of results' } },
+      semantic_search: { desc: 'Semantic search using AI embeddings', params: { query: 'Natural language query', directory: 'Limit search scope to directory', limit: 'Number of results', min_score: 'Minimum similarity score (0-1)' } },
+      deep_search: { desc: 'Deep search and return note content', params: { query: 'Search keywords', limit: 'Number of results', include_content: 'Include content' } },
+      query_database: { desc: 'Query database structure and row data', params: { database_id: 'Database ID', filter_column: 'Filter column name', filter_value: 'Filter value', limit: 'Max rows to return' } },
+      add_database_row: { desc: 'Add new row to database', params: { database_id: 'Database ID', cells: 'Cell values, key is column name' } },
+      get_backlinks: { desc: 'Get all notes linking to specified note (backlinks)', params: { note_name: 'Note name (without .md suffix)', include_context: 'Include link context' } },
+      generate_flashcards: { desc: 'Generate flashcards from note content (supports Q&A, cloze, MCQ, etc.)', params: { content: 'Source content for flashcard generation', source_note: 'Source note path (optional)', deck: 'Target deck name, default Default', types: 'Card types: basic/cloze/basic-reversed/mcq/list', count: 'Number to generate, default 5', language: 'Language: zh/en' } },
+      create_flashcard: { desc: 'Create a flashcard', params: { type: 'Card type: basic/cloze/basic-reversed/mcq/list', deck: 'Deck name', source: 'Source note link [[note]]', front: 'Question/front (basic/basic-reversed)', back: 'Answer/back (basic/basic-reversed)', text: 'Cloze text, use {{c1::answer}} format', question: 'Question (mcq/list)', options: 'Option list (mcq)', answer: 'Correct answer index 0-based (mcq)', items: 'List items (list)', ordered: 'Require order (list)', explanation: 'Explanation (optional)' } },
+      read_cached_output: { desc: 'Read previously cached long tool output', params: { id: 'cache_id (from long output summary hint)' } },
+    },
   },
 };

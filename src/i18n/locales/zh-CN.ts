@@ -1329,5 +1329,27 @@ export default {
       relevance: '相关度',
       systemError: '❌ 系统错误: {message}。\n\n请使用 <thinking> 标签分析错误原因，并尝试修复或使用替代方案。',
     },
+
+    // Function Calling Schema 描述
+    fcSchemas: {
+      read_note: { desc: '读取笔记文件的内容，返回带行号的内容', params: { path: '笔记路径，相对于笔记库根目录' } },
+      edit_note: { desc: '对笔记进行精确的查找替换修改，可选重命名文件', params: { path: '要编辑的笔记路径', edits: '编辑操作数组，每个操作包含 search 和 replace 字段', new_name: '新文件名（可选），不包含路径，仅文件名' } },
+      create_note: { desc: '创建新的笔记文件', params: { path: '笔记路径，相对于笔记库根目录', content: '完整的笔记内容' } },
+      list_notes: { desc: '列出指定目录下的笔记文件和子目录', params: { directory: '目录路径，相对于笔记库根目录，默认为根目录', recursive: '是否递归列出子目录内容，默认 true' } },
+      create_folder: { desc: '创建新的目录', params: { path: '目录路径，相对于笔记库根目录' } },
+      move_file: { desc: '移动文件到新位置', params: { from: '源文件路径', to: '目标文件路径' } },
+      rename_file: { desc: '重命名文件或文件夹', params: { path: '原文件路径', new_name: '新名称（不含路径）' } },
+      delete_note: { desc: '删除指定的笔记文件（移到回收站）', params: { path: '要删除的笔记路径' } },
+      search_notes: { desc: '语义搜索笔记库，基于内容相似性找到相关笔记', params: { query: '搜索查询，用自然语言描述', directory: '限定搜索范围的目录', limit: '返回结果数量，默认 10' } },
+      grep_search: { desc: '全文搜索笔记库，支持正则表达式', params: { query: '搜索关键词或正则表达式', directory: '限定搜索范围的目录', regex: '是否启用正则表达式模式', case_sensitive: '是否区分大小写', limit: '返回结果数量上限' } },
+      semantic_search: { desc: '使用 AI 嵌入进行语义搜索', params: { query: '自然语言查询', directory: '限定搜索范围的目录', limit: '返回结果数量', min_score: '最低相似度分数 (0-1)' } },
+      deep_search: { desc: '深度搜索并返回笔记内容', params: { query: '搜索关键词', limit: '返回数量', include_content: '是否包含内容' } },
+      query_database: { desc: '查询数据库结构和行数据', params: { database_id: '数据库 ID', filter_column: '过滤列名', filter_value: '过滤值', limit: '返回行数上限' } },
+      add_database_row: { desc: '向数据库添加新行', params: { database_id: '数据库 ID', cells: '单元格值，键为列名' } },
+      get_backlinks: { desc: '获取链接到指定笔记的所有笔记（反向链接）', params: { note_name: '笔记名称（不含 .md 后缀）', include_context: '是否包含链接上下文' } },
+      generate_flashcards: { desc: '从笔记内容生成闪卡（支持问答、填空、选择题等类型）', params: { content: '要生成闪卡的源内容', source_note: '来源笔记路径（可选）', deck: '目标牌组名称，默认 Default', types: '要生成的卡片类型：basic/cloze/basic-reversed/mcq/list', count: '生成数量，默认 5', language: '语言：zh/en' } },
+      create_flashcard: { desc: '创建一张闪卡', params: { type: '卡片类型：basic/cloze/basic-reversed/mcq/list', deck: '牌组名称', source: '来源笔记链接 [[note]]', front: '问题/正面（basic/basic-reversed）', back: '答案/背面（basic/basic-reversed）', text: '填空文本，使用 {{c1::答案}} 格式（cloze）', question: '问题（mcq/list）', options: '选项列表（mcq）', answer: '正确答案索引 0-based（mcq）', items: '列表项（list）', ordered: '是否需要按顺序（list）', explanation: '解释说明（可选）' } },
+      read_cached_output: { desc: '读取此前缓存的工具长输出全文', params: { id: 'cache_id（来自长输出摘要提示）' } },
+    },
   },
 };
