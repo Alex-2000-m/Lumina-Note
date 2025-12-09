@@ -1309,5 +1309,19 @@ Parameters:
         invalidType: 'Invalid card type',
       },
     },
+
+    // AgentLoop runtime messages
+    agentLoop: {
+      toolUseFailed: 'Agent failed to use tools correctly',
+      options: 'Options',
+      agentQuestion: 'Agent Question',
+      noQuestionProvided: 'ask_user did not provide question',
+      userRejected: 'User rejected tool call: {toolName}.\n\nPlease use <thinking> tag to analyze why the user rejected (may be dangerous operation, incorrect parameters, or not matching user intent), then try other approaches or ask the user for clarification.',
+      longOutputCached: '[Long output cached ID: {cacheId}, this is a summary. Before continuing reasoning, you must call read_cached_output (or say "view details {cacheId}") to get the full content. Do not call read_note or other read tools again.]',
+      toolErrorReflection: '❌ System rejected execution: Tool call error detected.\n\nReflect immediately:\n1. Is the tool name correct?\n2. Are parameters in valid JSON format?\n3. Are parameter values valid? (especially file paths with special characters)\n\nIn your next response:\n1. Must use <thinking> tag to analyze the error\n2. Fix the error and retry the tool call',
+      summarySystem: 'You are a summary assistant. Summarize tool output concisely, keeping key data/paths/error messages; limit to 300 characters without losing critical information.',
+      summaryUser: 'Please summarize the output of {toolName}:',
+      toolExecutionFailed: 'Tool execution failed',
+    },
   },
 };

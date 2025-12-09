@@ -28,6 +28,7 @@ import { useRAGStore } from "@/stores/useRAGStore";
 import { useNoteIndexStore, extractWikiLinks } from "@/stores/useNoteIndexStore";
 import { readFile } from "@/lib/tauri";
 import { getToolSchemas } from "../tools/schemas";
+import { getCurrentTranslations } from "@/stores/useLocaleStore";
 import { cacheToolOutput } from "./ToolOutputCache";
 
 const MAX_CONSECUTIVE_ERRORS = 3;
@@ -312,7 +313,7 @@ export class AgentLoop {
 
           if (this.stateManager.getConsecutiveErrors() >= MAX_CONSECUTIVE_ERRORS) {
             this.stateManager.setStatus("error");
-            this.stateManager.setError("Agent 未能正确使用工具");
+            this.stateManager.setError(getCurrentTranslations().prompts.agentLoop.toolUseFailed);
             break;
           }
 
@@ -405,12 +406,13 @@ export class AgentLoop {
       if (toolCall.name === "ask_user") {
         const question = typeof toolCall.params.question === "string" ? toolCall.params.question : "";
         const options = Array.isArray(toolCall.params.options) ? toolCall.params.options : null;
-        const optionsText = options && options.length > 0 ? `\n\n选项：\n${options.map((o, i) => `${i + 1}. ${o}`).join("\n")}` : "";
-        const content = `**Agent 提问**\n${question}${optionsText}`.trim();
+        const t = getCurrentTranslations().prompts.agentLoop;
+        const optionsText = options && options.length > 0 ? `\n\n${t.options}:\n${options.map((o, i) => `${i + 1}. ${o}`).join("\n")}` : "";
+        const content = `**${t.agentQuestion}**\n${question}${optionsText}`.trim();
 
         const askResult: ToolResult = {
           success: true,
-          content: content || "ask_user 未提供 question",
+          content: content || getCurrentTranslations().prompts.agentLoop.noQuestionProvided,
         };
 
         const askMessage = formatToolResult(toolCall, askResult);
@@ -441,7 +443,7 @@ export class AgentLoop {
         if (!approved) {
           this.stateManager.addMessage({
             role: "user",
-            content: `用户拒绝了工具调用: ${toolCall.name}。\n\n请使用 <thinking> 标签分析用户拒绝的原因（可能是操作危险、参数不正确或不符合用户意图），然后尝试其他方式或询问用户需求。`,
+            content: getCurrentTranslations().prompts.agentLoop.userRejected.replace('{toolName}', toolCall.name),
           });
           this.stateManager.setStatus("running");
           continue;
@@ -463,7 +465,7 @@ export class AgentLoop {
         const summaryText = summary?.trim() || result.content.slice(0, LONG_TOOL_RESULT_THRESHOLD);
         result = {
           ...result,
-          content: `${summaryText}\n\n[长输出已缓存 ID: ${cacheId}，此段为摘要。需要全文或继续推理前，必须调用 read_cached_output（或说“查看详情 ${cacheId}”）获取原文，不要重复调用 read_note/其他读取工具。]`,
+          content: `${summaryText}\n\n${getCurrentTranslations().prompts.agentLoop.longOutputCached.replace(/{cacheId}/g, cacheId)}`,
         };
       }
 
@@ -472,7 +474,7 @@ export class AgentLoop {
 
       // 如果执行失败，追加反思提示
       if (!result.success) {
-        resultMsg += `\n\n❌ 系统拒绝执行：检测到工具调用错误。\n\n请立即反思：\n1. 工具名称是否正确？\n2. 参数格式是否符合 JSON 规范？\n3. 参数值是否有效？(特别是文件路径是否包含特殊字符或格式错误)\n\n请在下一次回复中：\n1. 必须使用 <thinking> 标签详细分析错误原因\n2. 修正错误并重新调用工具`;
+        resultMsg += `\n\n${getCurrentTranslations().prompts.agentLoop.toolErrorReflection}`;
       }
 
       this.stateManager.addMessage({
@@ -508,15 +510,15 @@ export class AgentLoop {
    */
   private async summarizeToolOutput(content: string, toolName: string): Promise<string | null> {
     const configOverride = this.stateManager.getLLMConfig();
+    const t = getCurrentTranslations().prompts.agentLoop;
     const messages: Message[] = [
       {
         role: "system",
-        content:
-          "你是摘要助手，请用简洁中文要点总结工具输出，保留关键数据/路径/错误提示；限制在300字以内，避免丢失关键信息。",
+        content: t.summarySystem,
       },
       {
         role: "user",
-        content: `请摘要以下 ${toolName} 的输出：\n\n<output>\n${content}\n</output>`,
+        content: `${t.summaryUser.replace('{toolName}', toolName)}\n\n<output>\n${content}\n</output>`,
       },
     ];
 
@@ -546,7 +548,7 @@ export class AgentLoop {
       return {
         success: false,
         content: "",
-        error: error instanceof Error ? error.message : "工具执行失败",
+        error: error instanceof Error ? error.message : getCurrentTranslations().prompts.agentLoop.toolExecutionFailed,
       };
     }
   }

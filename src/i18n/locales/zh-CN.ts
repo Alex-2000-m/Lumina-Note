@@ -1309,5 +1309,19 @@ export default {
         invalidType: '无效的卡片类型',
       },
     },
+
+    // AgentLoop 运行时消息
+    agentLoop: {
+      toolUseFailed: 'Agent 未能正确使用工具',
+      options: '选项',
+      agentQuestion: 'Agent 提问',
+      noQuestionProvided: 'ask_user 未提供 question',
+      userRejected: '用户拒绝了工具调用: {toolName}。\n\n请使用 <thinking> 标签分析用户拒绝的原因（可能是操作危险、参数不正确或不符合用户意图），然后尝试其他方式或询问用户需求。',
+      longOutputCached: '[长输出已缓存 ID: {cacheId}，此段为摘要。需要全文或继续推理前，必须调用 read_cached_output（或说"查看详情 {cacheId}"）获取原文，不要重复调用 read_note/其他读取工具。]',
+      toolErrorReflection: '❌ 系统拒绝执行：检测到工具调用错误。\n\n请立即反思：\n1. 工具名称是否正确？\n2. 参数格式是否符合 JSON 规范？\n3. 参数值是否有效？(特别是文件路径是否包含特殊字符或格式错误)\n\n请在下一次回复中：\n1. 必须使用 <thinking> 标签详细分析错误原因\n2. 修正错误并重新调用工具',
+      summarySystem: '你是摘要助手，请用简洁要点总结工具输出，保留关键数据/路径/错误提示；限制在300字以内，避免丢失关键信息。',
+      summaryUser: '请摘要以下 {toolName} 的输出：',
+      toolExecutionFailed: '工具执行失败',
+    },
   },
 };

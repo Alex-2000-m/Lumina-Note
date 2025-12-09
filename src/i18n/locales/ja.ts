@@ -1099,5 +1099,19 @@ XMLタグ形式を使用してツールを呼び出します：
         invalidType: '無効なカードタイプ',
       },
     },
+
+    // AgentLoop ランタイムメッセージ
+    agentLoop: {
+      toolUseFailed: 'Agentがツールを正しく使用できませんでした',
+      options: 'オプション',
+      agentQuestion: 'Agentからの質問',
+      noQuestionProvided: 'ask_userにquestionが提供されていません',
+      userRejected: 'ユーザーがツール呼び出しを拒否しました: {toolName}。\n\n<thinking>タグを使用して、ユーザーが拒否した理由（危険な操作、不正なパラメータ、またはユーザーの意図と一致しない可能性）を分析し、他の方法を試すか、ユーザーに確認してください。',
+      longOutputCached: '[長い出力がキャッシュされました ID: {cacheId}、これは要約です。推論を続ける前に、read_cached_output（または「詳細を見る {cacheId}」）を呼び出して全文を取得してください。read_noteや他の読み取りツールを再度呼び出さないでください。]',
+      toolErrorReflection: '❌ システムが実行を拒否：ツール呼び出しエラーが検出されました。\n\n直ちに振り返ってください：\n1. ツール名は正しいですか？\n2. パラメータは有効なJSON形式ですか？\n3. パラメータ値は有効ですか？（特にファイルパスの特殊文字）\n\n次の応答で：\n1. <thinking>タグを使用してエラーを分析\n2. エラーを修正してツールを再呼び出し',
+      summarySystem: 'あなたは要約アシスタントです。ツール出力を簡潔に要約し、重要なデータ/パス/エラーメッセージを保持してください。300文字以内で重要な情報を失わないようにしてください。',
+      summaryUser: '{toolName}の出力を要約してください：',
+      toolExecutionFailed: 'ツール実行失敗',
+    },
   },
 };
