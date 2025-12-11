@@ -23,6 +23,7 @@ import { DatabaseView, CreateDatabaseDialog, DatabaseSplitView } from "@/compone
 import { PDFViewer } from "@/components/pdf";
 import { BrowserView } from "@/components/browser";
 import { FlashcardView } from "@/components/flashcard";
+import { CardFlowView } from "@/components/cardflow/CardFlowView";
 import { useAIStore } from "@/stores/useAIStore";
 import { saveFile } from "@/lib/tauri";
 import { TitleBar } from "@/components/layout/TitleBar";
@@ -539,6 +540,12 @@ function App() {
           <div className="flex-1 flex flex-col overflow-hidden bg-background">
             <TabBar />
             <FlashcardView deckId={activeTab.flashcardDeckId} />
+          </div>
+        ) : activeTab?.type === "cardflow" ? (
+          // 卡片流视图
+          <div className="flex-1 flex flex-col overflow-hidden bg-background">
+            <TabBar />
+            <CardFlowView />
           </div>
         ) : activeTab?.type === "ai-chat" ? (
           // 主视图区 AI 聊天标签页，交给 Editor 内部根据 tab 类型渲染

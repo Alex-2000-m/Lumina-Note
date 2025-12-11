@@ -13,6 +13,7 @@ import {
   Bot,
   Globe,
   Brain,
+  LayoutGrid,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -35,13 +36,14 @@ export function Ribbon() {
     currentFile,
     openWebpageTab,
     openFlashcardTab,
+    openCardFlowTab,
   } = useFileStore();
 
   // 当前激活的标签
   const activeTab = activeTabIndex >= 0 ? tabs[activeTabIndex] : null;
 
   // 归一化当前主视图所属的功能区，方便扩展
-  type RibbonSection = "ai" | "file" | "graph" | "video" | "database" | "browser" | "flashcard" | "none";
+  type RibbonSection = "ai" | "file" | "graph" | "video" | "database" | "browser" | "flashcard" | "cardflow" | "none";
 
   let activeSection: RibbonSection = "none";
   if (activeTab?.type === "ai-chat") {
@@ -56,6 +58,8 @@ export function Ribbon() {
     activeSection = "browser";
   } else if (activeTab?.type === "flashcard") {
     activeSection = "flashcard";
+  } else if (activeTab?.type === "cardflow") {
+    activeSection = "cardflow";
   } else if (activeTab?.type === "file" || currentFile) {
     // 没有特殊类型时，只要在编辑文件，就认为是文件编辑区
     activeSection = "file";
@@ -144,6 +148,20 @@ export function Ribbon() {
           title="文件编辑器"
         >
           <FileText size={18} />
+        </button>
+
+        {/* Card Flow */}
+        <button
+          onClick={openCardFlowTab}
+          className={cn(
+            "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
+            activeSection === "cardflow"
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+          title="卡片视图"
+        >
+          <LayoutGrid size={18} />
         </button>
 
         {/* Graph */}

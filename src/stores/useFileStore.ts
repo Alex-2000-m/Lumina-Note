@@ -22,7 +22,8 @@ export type TabType =
   | "pdf"
   | "ai-chat"
   | "webpage"
-  | "flashcard";
+  | "flashcard"
+  | "cardflow";
 
 // 孤立视图节点信息
 export interface IsolatedNodeInfo {
@@ -114,6 +115,7 @@ interface FileState {
   openWebpageTab: (url: string, title?: string) => void;
   updateWebpageTab: (tabId: string, url?: string, title?: string) => void;
   openFlashcardTab: (deckId?: string) => void;
+  openCardFlowTab: () => void;
   
   // Undo/Redo actions
   undo: () => void;
@@ -1039,6 +1041,55 @@ export const useFileStore = create<FileState>()(
       currentFile: pdfPath,
       currentContent: "",
       isDirty: false,
+    });
+  },
+
+  // 打开卡片流标签页
+  openCardFlowTab: () => {
+    const { tabs, activeTabIndex, currentContent, isDirty, undoStack, redoStack } = get();
+
+    // 检查是否已有 cardflow 标签页
+    const existingIndex = tabs.findIndex((tab) => tab.type === "cardflow");
+    if (existingIndex !== -1) {
+      get().switchTab(existingIndex);
+      return;
+    }
+
+    // 保存当前标签页状态
+    let updatedTabs = [...tabs];
+    if (activeTabIndex >= 0 && tabs[activeTabIndex]) {
+      updatedTabs[activeTabIndex] = {
+        ...updatedTabs[activeTabIndex],
+        content: currentContent,
+        isDirty,
+        undoStack,
+        redoStack,
+      };
+    }
+
+    // 创建卡片流标签页
+    const cardFlowTab: Tab = {
+      id: "__card_flow__",
+      type: "cardflow",
+      path: "",
+      name: "卡片视图",
+      content: "",
+      isDirty: false,
+      undoStack: [],
+      redoStack: [],
+    };
+
+    updatedTabs.push(cardFlowTab);
+
+    set({
+      tabs: updatedTabs,
+      activeTabIndex: updatedTabs.length - 1,
+      currentFile: null,
+      currentContent: "",
+      isDirty: false,
+      undoStack: [],
+      redoStack: [],
+      lastSavedContent: "",
     });
   },
 
