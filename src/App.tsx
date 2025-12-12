@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { RightPanel } from "@/components/layout/RightPanel";
@@ -11,7 +11,7 @@ import { useFileStore } from "@/stores/useFileStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useNoteIndexStore } from "@/stores/useNoteIndexStore";
 import { useRAGStore } from "@/stores/useRAGStore";
-import { FolderOpen, Sparkles, PanelLeft, PanelRight } from "lucide-react";
+import { FolderOpen, Sparkles, PanelRight } from "lucide-react";
 import { useLocaleStore } from "@/stores/useLocaleStore";
 import { CommandPalette, PaletteMode } from "@/components/search/CommandPalette";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
@@ -226,6 +226,7 @@ function App() {
     rightSidebarOpen,
     leftSidebarWidth,
     rightSidebarWidth,
+    setLeftSidebarOpen,
     setLeftSidebarWidth,
     setRightSidebarWidth,
     toggleLeftSidebar,
@@ -393,21 +394,36 @@ function App() {
   }, [handleOpenVault, setSearchOpen]);
 
   // Handle resize - must be before conditional returns
-  // VS Code 风格：当面板已经是最小宽度，继续向内拖时自动折叠
+  // VS Code 风格：拖动可以折叠/展开面板
   const LEFT_MIN_WIDTH = 200;  // store 中的最小值
   const RIGHT_MIN_WIDTH = 280; // store 中的最小值
   
+  // 累计拖拽距离（用于折叠状态下展开）
+  const dragAccumulatorRef = useRef(0);
+  
   const handleLeftResize = useCallback(
     (delta: number) => {
-      const newWidth = leftSidebarWidth + delta;
-      // 当已经是最小宽度且继续向内拖时，折叠面板
-      if (leftSidebarWidth <= LEFT_MIN_WIDTH && delta < 0) {
-        toggleLeftSidebar();
+      if (!leftSidebarOpen) {
+        // 面板已折叠：累计向右拖拽距离
+        dragAccumulatorRef.current += delta;
+        if (dragAccumulatorRef.current > 50) {
+          // 累计拖动超过 50px，打开面板并设置宽度
+          const newWidth = Math.max(LEFT_MIN_WIDTH, dragAccumulatorRef.current);
+          setLeftSidebarOpen(true);
+          setLeftSidebarWidth(newWidth);
+          dragAccumulatorRef.current = 0;
+        }
       } else {
-        setLeftSidebarWidth(newWidth);
+        // 面板已打开：调整宽度或折叠
+        dragAccumulatorRef.current = 0; // 重置累计器
+        if (leftSidebarWidth <= LEFT_MIN_WIDTH && delta < 0) {
+          setLeftSidebarOpen(false);
+        } else {
+          setLeftSidebarWidth(leftSidebarWidth + delta);
+        }
       }
     },
-    [leftSidebarWidth, setLeftSidebarWidth, toggleLeftSidebar]
+    [leftSidebarOpen, leftSidebarWidth, setLeftSidebarOpen, setLeftSidebarWidth]
   );
 
   const handleRightResize = useCallback(
@@ -483,25 +499,13 @@ function App() {
         <Sidebar />
       </div>
 
-      {/* Left Resize Handle + Collapse Button */}
+      {/* Left Resize Handle - VS Code 风格，始终显示，可拖拽展开/折叠 */}
       <div className="relative flex-shrink-0 h-full">
-        {leftSidebarOpen && (
-          <ResizeHandle
-            direction="left"
-            onResize={handleLeftResize}
-            onDoubleClick={toggleLeftSidebar}
-          />
-        )}
-        {/* Left Collapse Button - 只在面板收起时显示 */}
-        {!leftSidebarOpen && (
-          <button
-            onClick={toggleLeftSidebar}
-            className="absolute top-1/2 -translate-y-1/2 z-10 p-1 rounded-md bg-muted/80 hover:bg-accent border border-border shadow-sm transition-all left-1"
-            title="展开左侧栏"
-          >
-            <PanelLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-        )}
+        <ResizeHandle
+          direction="left"
+          onResize={handleLeftResize}
+          onDoubleClick={toggleLeftSidebar}
+        />
       </div>
 
       {/* Main content - switches between Editor, Graph, Split, Diff, VideoNote and AI Chat based on state */}
