@@ -11,7 +11,7 @@ import { useFileStore } from "@/stores/useFileStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useNoteIndexStore } from "@/stores/useNoteIndexStore";
 import { useRAGStore } from "@/stores/useRAGStore";
-import { FolderOpen, Sparkles, PanelLeftClose, PanelRightClose, PanelLeft, PanelRight } from "lucide-react";
+import { FolderOpen, Sparkles, PanelLeft, PanelRight } from "lucide-react";
 import { useLocaleStore } from "@/stores/useLocaleStore";
 import { CommandPalette, PaletteMode } from "@/components/search/CommandPalette";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
@@ -393,18 +393,34 @@ function App() {
   }, [handleOpenVault, setSearchOpen]);
 
   // Handle resize - must be before conditional returns
+  // VS Code 风格：当面板已经是最小宽度，继续向内拖时自动折叠
+  const LEFT_MIN_WIDTH = 200;  // store 中的最小值
+  const RIGHT_MIN_WIDTH = 280; // store 中的最小值
+  
   const handleLeftResize = useCallback(
     (delta: number) => {
-      setLeftSidebarWidth(leftSidebarWidth + delta);
+      const newWidth = leftSidebarWidth + delta;
+      // 当已经是最小宽度且继续向内拖时，折叠面板
+      if (leftSidebarWidth <= LEFT_MIN_WIDTH && delta < 0) {
+        toggleLeftSidebar();
+      } else {
+        setLeftSidebarWidth(newWidth);
+      }
     },
-    [leftSidebarWidth, setLeftSidebarWidth]
+    [leftSidebarWidth, setLeftSidebarWidth, toggleLeftSidebar]
   );
 
   const handleRightResize = useCallback(
     (delta: number) => {
-      setRightSidebarWidth(rightSidebarWidth + delta);
+      const newWidth = rightSidebarWidth + delta;
+      // 当已经是最小宽度且继续向内拖时，折叠面板
+      if (rightSidebarWidth <= RIGHT_MIN_WIDTH && delta < 0) {
+        toggleRightSidebar();
+      } else {
+        setRightSidebarWidth(newWidth);
+      }
     },
-    [rightSidebarWidth, setRightSidebarWidth]
+    [rightSidebarWidth, setRightSidebarWidth, toggleRightSidebar]
   );
 
   // Welcome screen when no vault is open
@@ -476,20 +492,16 @@ function App() {
             onDoubleClick={toggleLeftSidebar}
           />
         )}
-        {/* Left Collapse Button */}
-        <button
-          onClick={toggleLeftSidebar}
-          className={`absolute top-1/2 -translate-y-1/2 z-10 p-1 rounded-md bg-muted/80 hover:bg-accent border border-border shadow-sm transition-all ${
-            leftSidebarOpen ? "left-0 -translate-x-1/2" : "left-1"
-          }`}
-          title={leftSidebarOpen ? "收起左侧栏" : "展开左侧栏"}
-        >
-          {leftSidebarOpen ? (
-            <PanelLeftClose className="w-4 h-4 text-muted-foreground" />
-          ) : (
+        {/* Left Collapse Button - 只在面板收起时显示 */}
+        {!leftSidebarOpen && (
+          <button
+            onClick={toggleLeftSidebar}
+            className="absolute top-1/2 -translate-y-1/2 z-10 p-1 rounded-md bg-muted/80 hover:bg-accent border border-border shadow-sm transition-all left-1"
+            title="展开左侧栏"
+          >
             <PanelLeft className="w-4 h-4 text-muted-foreground" />
-          )}
-        </button>
+          </button>
+        )}
       </div>
 
       {/* Main content - switches between Editor, Graph, Split, Diff, VideoNote and AI Chat based on state */}
@@ -574,20 +586,16 @@ function App() {
             onDoubleClick={toggleRightSidebar}
           />
         )}
-        {/* Right Collapse Button */}
-        <button
-          onClick={toggleRightSidebar}
-          className={`absolute top-1/2 -translate-y-1/2 z-10 p-1 rounded-md bg-muted/80 hover:bg-accent border border-border shadow-sm transition-all ${
-            rightSidebarOpen ? "right-0 translate-x-1/2" : "right-1"
-          }`}
-          title={rightSidebarOpen ? "收起右侧栏" : "展开右侧栏"}
-        >
-          {rightSidebarOpen ? (
-            <PanelRightClose className="w-4 h-4 text-muted-foreground" />
-          ) : (
+        {/* Right Collapse Button - 只在面板收起时显示 */}
+        {!rightSidebarOpen && (
+          <button
+            onClick={toggleRightSidebar}
+            className="absolute top-1/2 -translate-y-1/2 z-10 p-1 rounded-md bg-muted/80 hover:bg-accent border border-border shadow-sm transition-all right-1"
+            title="展开右侧栏"
+          >
             <PanelRight className="w-4 h-4 text-muted-foreground" />
-          )}
-        </button>
+          </button>
+        )}
       </div>
 
       {/* Right Sidebar */}
