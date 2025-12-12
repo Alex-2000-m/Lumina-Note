@@ -4,6 +4,9 @@ import { NoteCard } from './NoteCard';
 import { useNoteCards, NoteCardData } from './useNoteCards';
 import { Search, Filter, Loader2 } from 'lucide-react';
 
+// 保存滚动位置（组件外部，跨挂载保持）
+let savedScrollTop = 0;
+
 // 动态列数 Hook
 function useColumnCount() {
   const [columns, setColumns] = useState(1);
@@ -76,7 +79,22 @@ export function CardFlowView() {
     return cols;
   }, [filteredCards, columnCount]);
 
-  // 滚动监听 - 滚动到 50% 时预加载
+  // 恢复滚动位置（等待卡片加载后）
+  const hasRestoredScroll = useRef(false);
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    // 只在有卡片且未恢复过时执行
+    if (!container || savedScrollTop === 0 || hasRestoredScroll.current) return;
+    if (filteredCards.length === 0) return;
+    
+    // 等待 DOM 更新后恢复位置
+    requestAnimationFrame(() => {
+      container.scrollTop = savedScrollTop;
+      hasRestoredScroll.current = true;
+    });
+  }, [filteredCards.length]);
+
+  // 滚动监听 - 滚动到 50% 时预加载 + 保存位置
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -89,6 +107,10 @@ export function CardFlowView() {
       ticking = true;
       requestAnimationFrame(() => {
         const { scrollTop, scrollHeight, clientHeight } = container;
+        
+        // 保存滚动位置
+        savedScrollTop = scrollTop;
+        
         const scrollPercent = scrollTop / (scrollHeight - clientHeight);
         
         // 滚动到 50% 时就开始加载更多
