@@ -5,6 +5,7 @@ import { FileEntry, readFile } from '@/lib/tauri';
 export interface NoteCardData {
   entry: FileEntry;
   content: string;
+  fileType: 'md' | 'pdf';
 }
 
 const BATCH_SIZE = 50; // 激进策略：大批量加载，构建厚实缓冲区
@@ -25,7 +26,7 @@ export function useNoteCards() {
       for (const entry of entries) {
         if (entry.is_dir) {
           if (entry.children) traverse(entry.children);
-        } else if (entry.name.endsWith('.md')) {
+        } else if (entry.name.endsWith('.md') || entry.name.endsWith('.pdf')) {
           files.push(entry);
         }
       }
@@ -80,8 +81,10 @@ export function useNoteCards() {
         const chunk = allFiles.slice(i, i + concurrency);
         const results = await Promise.allSettled(
           chunk.map(async (file) => {
-            const content = await readFile(file.path);
-            return { entry: file, content };
+            const isPdf = file.name.endsWith('.pdf');
+            // PDF 文件不需要读取内容，只记录类型
+            const content = isPdf ? '' : await readFile(file.path);
+            return { entry: file, content, fileType: isPdf ? 'pdf' : 'md' } as NoteCardData;
           })
         );
         

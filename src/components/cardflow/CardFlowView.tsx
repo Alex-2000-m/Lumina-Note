@@ -28,7 +28,7 @@ function useColumnCount() {
 }
 
 export function CardFlowView() {
-  const { openFile } = useFileStore();
+  const { openFile, openPDFTab } = useFileStore();
   const { 
     cards, 
     loading, 
@@ -172,7 +172,14 @@ export function CardFlowView() {
                       key={card.entry.path} 
                       entry={card.entry} 
                       content={card.content}
-                      onClick={() => openFile(card.entry.path)}
+                      fileType={card.fileType}
+                      onClick={() => {
+                        if (card.fileType === 'pdf') {
+                          openPDFTab(card.entry.path);
+                        } else {
+                          openFile(card.entry.path);
+                        }
+                      }}
                     />
                   ))}
                 </div>

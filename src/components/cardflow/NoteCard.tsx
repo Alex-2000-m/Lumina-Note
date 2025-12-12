@@ -1,11 +1,19 @@
-import React, { useMemo } from 'react';
-import { FileEntry } from '@/lib/tauri';
-import { Folder, Hash } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { FileEntry, readBinaryFileBase64 } from '@/lib/tauri';
+import { Folder, Hash, FileText, Loader2 } from 'lucide-react';
 import { getFileName } from '@/lib/utils';
+import { pdfjs } from 'react-pdf';
+
+// 配置 PDF.js worker（复用现有配置）
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+// PDF 缩略图缓存（存储渲染后的图片 base64，而不是完整 PDF 数据）
+const pdfThumbnailCache = new Map<string, string>();
 
 interface NoteCardProps {
   entry: FileEntry;
   content: string;
+  fileType: 'md' | 'pdf';
   onClick: () => void;
 }
 
@@ -22,7 +30,134 @@ function hashCode(str: string): number {
 // 卡片尺寸类型
 type CardSize = 'compact' | 'normal' | 'tall' | 'featured';
 
-export const NoteCard = React.memo(function NoteCard({ entry, content, onClick }: NoteCardProps) {
+// 生成 PDF 缩略图（使用 pdfjs 直接渲染到 canvas）
+async function generatePdfThumbnail(pdfPath: string): Promise<string> {
+  // 检查缓存
+  if (pdfThumbnailCache.has(pdfPath)) {
+    return pdfThumbnailCache.get(pdfPath)!;
+  }
+  
+  // 读取 PDF 文件
+  const base64 = await readBinaryFileBase64(pdfPath);
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  
+  // 使用 pdfjs 加载 PDF
+  const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+  const page = await pdf.getPage(1);
+  
+  // 计算缩略图尺寸（宽度 300px）
+  const viewport = page.getViewport({ scale: 1 });
+  const scale = 300 / viewport.width;
+  const scaledViewport = page.getViewport({ scale });
+  
+  // 创建 canvas 并渲染
+  const canvas = document.createElement('canvas');
+  canvas.width = scaledViewport.width;
+  canvas.height = scaledViewport.height;
+  const context = canvas.getContext('2d')!;
+  
+  await page.render({
+    canvasContext: context,
+    viewport: scaledViewport,
+    canvas,
+  } as any).promise;
+  
+  // 转换为图片 base64
+  const thumbnail = canvas.toDataURL('image/jpeg', 0.8);
+  
+  // 缓存并返回
+  pdfThumbnailCache.set(pdfPath, thumbnail);
+  
+  // 清理
+  pdf.destroy();
+  
+  return thumbnail;
+}
+
+// PDF 卡片组件
+function PDFCard({ entry, onClick }: { entry: FileEntry; onClick: () => void }) {
+  const [thumbnail, setThumbnail] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  
+  const title = getFileName(entry.name).replace('.pdf', '');
+  const pathParts = entry.path.replace(/\\/g, '/').split('/');
+  const folder = pathParts.length > 1 ? pathParts[pathParts.length - 2] : 'Root';
+
+  useEffect(() => {
+    let mounted = true;
+    
+    generatePdfThumbnail(entry.path)
+      .then(thumb => {
+        if (mounted) {
+          setThumbnail(thumb);
+          setLoading(false);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to generate PDF thumbnail:', err);
+        if (mounted) {
+          setError(true);
+          setLoading(false);
+        }
+      });
+    
+    return () => { mounted = false; };
+  }, [entry.path]);
+
+  return (
+    <div 
+      onClick={onClick}
+      className="group w-full rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:shadow-lg hover:border-primary/50 hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col"
+    >
+      {/* PDF 第一页预览 */}
+      <div className="w-full bg-white relative overflow-hidden">
+        {loading ? (
+          <div className="aspect-[3/4] flex items-center justify-center bg-muted">
+            <Loader2 className="animate-spin text-muted-foreground" size={24} />
+          </div>
+        ) : error || !thumbnail ? (
+          <div className="aspect-[3/4] flex flex-col items-center justify-center bg-muted">
+            <FileText className="text-muted-foreground" size={40} />
+            <span className="text-xs text-muted-foreground mt-2">无法预览</span>
+          </div>
+        ) : (
+          <img 
+            src={thumbnail} 
+            alt={title}
+            className="w-full h-auto"
+            loading="lazy"
+          />
+        )}
+        {/* PDF 标签 */}
+        <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-red-500 text-white text-[10px] font-medium rounded shadow">
+          PDF
+        </div>
+      </div>
+
+      <div className="p-4 flex flex-col gap-2">
+        <h3 className="font-semibold leading-tight group-hover:text-primary transition-colors text-base line-clamp-2">
+          {title}
+        </h3>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Folder size={12} />
+          <span>{folder}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export const NoteCard = React.memo(function NoteCard({ entry, content, fileType, onClick }: NoteCardProps) {
+  // PDF 文件使用专门的 PDF 卡片组件
+  if (fileType === 'pdf') {
+    return <PDFCard entry={entry} onClick={onClick} />;
+  }
+
   const { title, summary, image, tags, folder, cardSize, summaryLines, imageRatio } = useMemo(() => {
     const lines = content.split('\n');
     let title = getFileName(entry.name).replace('.md', '');
@@ -219,4 +354,4 @@ export const NoteCard = React.memo(function NoteCard({ entry, content, onClick }
       </div>
     </div>
   );
-}, (prev, next) => prev.entry.path === next.entry.path && prev.content === next.content);
+}, (prev, next) => prev.entry.path === next.entry.path && prev.content === next.content && prev.fileType === next.fileType);
