@@ -281,6 +281,84 @@ function WebSearchResultsList({
   );
 }
 
+/** 爬取网页动画列表 */
+function CrawlingPagesList({
+  results,
+  crawlingProgress,
+  isCrawling = false,
+}: {
+  results: WebSearchResult[];
+  crawlingProgress: { current: number; total: number };
+  isCrawling?: boolean;
+}) {
+  if (!isCrawling && crawlingProgress.total === 0) return null;
+
+  // 当前正在爬取的页面
+  const currentIndex = crawlingProgress.current - 1;
+  const crawledPages = results.slice(0, crawlingProgress.current);
+
+  return (
+    <div className="mt-4">
+      <div className="font-medium italic mb-2">
+        <RainbowText
+          className="flex items-center text-sm"
+          animated={isCrawling}
+        >
+          <BookOpen className="w-4 h-4 mr-2" />
+          <span>
+            {isCrawling
+              ? `正在阅读网页 (${crawlingProgress.current}/${crawlingProgress.total})...`
+              : `已阅读 ${crawlingProgress.total} 个网页`}
+          </span>
+        </RainbowText>
+      </div>
+      <ul className="flex flex-wrap gap-2">
+        {/* 已爬取的页面 */}
+        {crawledPages.map((result, i) => {
+          const isCurrentlyCrawling = isCrawling && i === currentIndex;
+          return (
+            <motion.li
+              key={`crawl-${result.url}-${i}`}
+              className={cn(
+                "text-muted-foreground bg-accent flex items-center gap-2 rounded-md px-2 py-1 text-xs",
+                isCurrentlyCrawling && "ring-2 ring-primary/50"
+              )}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: 0.15,
+                ease: "easeOut",
+              }}
+            >
+              {isCurrentlyCrawling ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+              ) : (
+                <FavIcon url={result.url} size={14} />
+              )}
+              <span className="truncate max-w-[120px]" title={result.title}>
+                {result.title}
+              </span>
+              {!isCurrentlyCrawling && (
+                <Check className="w-3 h-3 text-green-500 flex-shrink-0" />
+              )}
+            </motion.li>
+          );
+        })}
+        {/* 待爬取的页面（骨架屏） */}
+        {isCrawling &&
+          [...Array(Math.min(crawlingProgress.total - crawlingProgress.current, 3))].map((_, i) => (
+            <li key={`pending-${i}`}>
+              <Skeleton
+                className="h-7 w-28 rounded-md"
+                style={{ animationDelay: `${i * 0.15}s` }}
+              />
+            </li>
+          ))}
+      </ul>
+    </div>
+  );
+}
+
 /** 澄清面板 */
 function ClarificationPanel({
   question,
@@ -643,6 +721,11 @@ ${reportContent}`;
                   <WebSearchResultsList
                     results={webSearchResults}
                     isSearching={phase === "searching_web"}
+                  />
+                  <CrawlingPagesList
+                    results={webSearchResults}
+                    crawlingProgress={crawlingProgress}
+                    isCrawling={phase === "crawling_web"}
                   />
                 </>
               )}
