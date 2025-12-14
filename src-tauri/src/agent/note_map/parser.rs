@@ -232,6 +232,7 @@ mod tests {
     fn test_count_words() {
         assert_eq!(count_words("Hello world"), 2);
         assert_eq!(count_words("你好世界"), 4);
-        assert_eq!(count_words("Hello 你好 world"), 6);
+        // "Hello" = 1, "你" = 1, "好" = 1, "world" = 1 = 4
+        assert_eq!(count_words("Hello 你好 world"), 4);
     }
 }
