@@ -11,6 +11,7 @@ pub mod commands;
 pub mod deep_research;
 pub mod note_map;
 pub mod messages;
+pub mod debug_log;
 
 pub use types::*;
 pub use commands::*;

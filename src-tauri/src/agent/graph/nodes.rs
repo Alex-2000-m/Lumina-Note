@@ -20,6 +20,10 @@ pub async fn coordinator_node(
     llm: &LlmClient,
     mut state: GraphState,
 ) -> Result<NodeResult, String> {
+    use crate::agent::debug_log as dbg;
+    
+    dbg::log_separator("协调器节点 (Coordinator)");
+    
     let _ = app.emit("agent-event", AgentEvent::StatusChange {
         status: AgentStatus::Running,
     });
@@ -75,6 +79,17 @@ pub async fn coordinator_node(
     // 解析意图
     let intent = parse_intent(&response.content);
     state.intent = intent.clone();
+    
+    // 调试日志：记录意图分析结果
+    let route = match intent {
+        TaskIntent::Chat => "reporter",
+        TaskIntent::Edit => "editor",
+        TaskIntent::Create => "writer",
+        TaskIntent::Organize => "organizer",
+        TaskIntent::Search => "researcher",
+        TaskIntent::Complex => "planner",
+    };
+    dbg::log_intent(&format!("{:?}", intent), route, &response.content);
 
     // 发送意图分析结果作为一条完整的消息
     // 使用 AgentMessage 事件来确保消息被单独保存
@@ -302,6 +317,7 @@ async fn agent_worker_node(
 ) -> Result<NodeResult, String> {
     use crate::agent::note_map::{generate_note_map, extract_mentioned_notes, NoteMapConfig};
     use crate::agent::messages::{ChatChunks, FORMAT_REMINDER};
+    use crate::agent::debug_log as dbg;
     
     let tools = get_tools_for_agent(agent_name);
     let tool_registry = ToolRegistry::new(state.workspace_path.clone());
@@ -397,11 +413,31 @@ async fn agent_worker_node(
         if iteration > max_iterations {
             // 超过最大迭代次数，强制结束
             state.observations.push("[系统] 达到最大工具调用次数，自动结束".to_string());
+            dbg::log_error("达到最大工具调用次数，自动结束");
             break;
         }
         
+        // 调试日志：记录迭代开始
+        dbg::log_iteration(iteration);
+        
+        // 调试日志：记录发送给 LLM 的消息
+        dbg::log_llm_request(&messages, Some(&tools));
+        
         // 调用 LLM（非流式，工作节点不需要流式输出给用户）
-        let response = llm.call(&messages, Some(&tools)).await?;
+        let response = match llm.call(&messages, Some(&tools)).await {
+            Ok(r) => r,
+            Err(e) => {
+                dbg::log_error(&format!("LLM 调用失败: {}", e));
+                return Err(e);
+            }
+        };
+        
+        // 调试日志：记录 LLM 响应
+        dbg::log_llm_response(
+            &response.content,
+            response.tool_calls.as_deref(),
+            (response.prompt_tokens, response.completion_tokens, response.total_tokens)
+        );
         
         // 发送 token 使用量
         let _ = app.emit("agent-event", AgentEvent::TokenUsage {
@@ -434,6 +470,14 @@ async fn agent_worker_node(
 
             // 执行工具
             let result = tool_registry.execute(&tool_call).await;
+            
+            // 调试日志：记录工具执行结果
+            dbg::log_tool_result(
+                &tool_call.name,
+                result.success,
+                &result.content,
+                result.error.as_deref()
+            );
 
             // 发送工具结果事件
             let _ = app.emit("agent-event", AgentEvent::ToolResult {
