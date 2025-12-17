@@ -63,8 +63,13 @@ pub async fn coordinator_node(
 当前工作区：{}
 当前笔记：{}
 
-以下是笔记库的目录结构：
+以下是笔记库的目录结构快照（对话开始时生成）：
 {}
+
+注意：此目录结构为静态快照，可能：
+- 不反映对话期间的文件变更
+- 对大型笔记库进行了裁剪
+如需最新信息，请使用 list_notes 或 search_notes 工具。
 
 请用 JSON 格式回复：
 {{"intent": "chat|edit|create|organize|search|complex", "reason": "判断理由"}}
@@ -1053,7 +1058,11 @@ fn build_agent_prompt(agent_name: &str, workspace: &str, context: &str, supports
 
 工作区路径：{workspace}
 
+以下是笔记库的目录结构快照（对话开始时生成）：
 {context}
+
+注意：此目录结构为静态快照，可能不反映对话期间的文件变更。
+如需最新信息，请使用 list_notes、search_notes 或 read_note 工具。
 
 ====
 
