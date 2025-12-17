@@ -384,7 +384,7 @@ async fn agent_worker_node(
     let mut messages = chunks.to_messages();
 
     // 多轮工具调用循环
-    let max_iterations = 10; // 防止无限循环
+    let max_iterations = 15; // 防止无限循环
     let mut iteration = 0;
     
     loop {
