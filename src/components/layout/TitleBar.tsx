@@ -1,7 +1,7 @@
 /**
- * è‡ªå®šä¹‰æ ‡é¢˜æ 
- * æ›¿ä»£ç³»ç»Ÿæ ‡é¢˜æ ï¼Œæ”¯æŒä¸»é¢˜é¢œè‰²
- * Mac ä¸Šä½¿ç”¨åŽŸç”Ÿé€æ˜Žæ ‡é¢˜æ ï¼Œåªæ˜¾ç¤ºæ‹–æ‹½åŒºåŸ?
+ * 自定义标题栏
+ * 替代系统标题栏，支持主题颜色
+ * Mac 上使用原生透明标题栏，只显示拖拽区域
  */
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -17,7 +17,7 @@ export function TitleBar() {
   const [isMac, setIsMac] = useState(false);
 
   useEffect(() => {
-    // æ£€æµ‹å¹³å?
+    // 检测平台
     const checkPlatform = async () => {
       try {
         const os = platform();
@@ -27,8 +27,8 @@ export function TitleBar() {
       }
     };
     checkPlatform();
-    
-    // ç›‘å¬çª—å£æœ€å¤§åŒ–çŠ¶æ€?
+
+    // 监听窗口最大化状态
     const checkMaximized = async () => {
       try {
         const maximized = await getCurrentWindow().isMaximized();
@@ -39,7 +39,7 @@ export function TitleBar() {
     };
     checkMaximized();
 
-    // ç›‘å¬çª—å£çŠ¶æ€å˜åŒ?
+    // 监听窗口状态变化
     let unlistenFn: (() => void) | null = null;
     getCurrentWindow().onResized(() => {
       checkMaximized();
@@ -53,10 +53,16 @@ export function TitleBar() {
   }, []);
 
   const handleDragStart = (e: React.MouseEvent) => {
-    // åªå“åº”å·¦é”?
     if (e.button !== 0) return;
-    // å¼€å§‹æ‹–æ‹?
+    if (e.detail >= 2) return;
     getCurrentWindow().startDragging();
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-tauri-drag-region="false"]')) return;
+    handleMaximize();
   };
 
   const handleMinimize = async () => {
@@ -83,16 +89,16 @@ export function TitleBar() {
     }
   };
 
-  // Mac ä¸Šä½¿ç”¨åŽŸç”Ÿæ ‡é¢˜æ ï¼Œåªéœ€è¦ä¸€ä¸ªé€æ˜Žçš„æ‹–æ‹½åŒºåŸ?
+  // Mac 上使用原生标题栏，只需要一个透明的拖拽区域
   if (isMac) {
     return (
-      <div 
+      <div
         className="h-8 flex items-center bg-transparent select-none"
         data-tauri-drag-region
       >
-        {/* Mac ä¸Šå·¦ä¾§ç•™ç©ºç»™åŽŸç”Ÿçº¢ç»¿ç¯æŒ‰é’?*/}
+        {/* Mac 上左侧留空给原生红绿灯按钮 */}
         <div className="w-20" />
-        {/* ä¸­é—´ï¼šåº”ç”¨æ ‡é¢?*/}
+        {/* 中间：应用标题 */}
         <div className="flex-1 flex items-center justify-center">
           <span className="text-xs text-muted-foreground font-medium pointer-events-none">
             Lumina Note
@@ -112,13 +118,15 @@ export function TitleBar() {
     );
   }
 
-  // Windows/Linux ä½¿ç”¨è‡ªå®šä¹‰æ ‡é¢˜æ 
+  // Windows/Linux 使用自定义标题栏
   return (
-    <div 
+    <div
       className="h-8 flex items-center justify-between bg-muted border-b border-border select-none"
       onMouseDown={handleDragStart}
+      onDoubleClick={handleDoubleClick}
+      data-tauri-drag-region
     >
-      {/* å·¦ä¾§ï¼šåº”ç”¨å›¾æ ‡å’Œæ ‡é¢˜ */}
+      {/* 左侧：应用图标和标题 */}
       <div className="flex items-center gap-2 px-3">
         <img src="/lumina.svg" alt="Logo" className="w-4 h-4 pointer-events-none" />
         <span className="text-xs text-muted-foreground font-medium pointer-events-none">
@@ -126,13 +134,15 @@ export function TitleBar() {
         </span>
       </div>
 
-      {/* ä¸­é—´ï¼šæ‹–æ‹½åŒºåŸ?*/}
+      {/* 中间：拖拽区域 */}
       <div className="flex-1 h-full" />
 
-      {/* å³ä¾§ï¼šè¯­è¨€åˆ‡æ¢ + çª—å£æŽ§åˆ¶æŒ‰é’?*/}
+      {/* 右侧：语言切换 + 窗口控制按钮 */}
       <div
         className="flex items-center h-full gap-2 pr-1"
         onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        data-tauri-drag-region="false"
       >
         <LanguageSwitcher
           compact
@@ -141,7 +151,7 @@ export function TitleBar() {
           buttonClassName="h-7 bg-muted/70 hover:bg-accent"
         />
         <div className="flex items-center h-full">
-          {/* æœ€å°åŒ– */}
+          {/* 最小化 */}
           <button
             onClick={handleMinimize}
             className="h-full px-4 hover:bg-accent transition-colors flex items-center justify-center"
@@ -150,7 +160,7 @@ export function TitleBar() {
             <Minus size={14} className="text-muted-foreground" />
           </button>
 
-          {/* æœ€å¤§åŒ–/è¿˜åŽŸ */}
+          {/* 最大化/还原 */}
           <button
             onClick={handleMaximize}
             className="h-full px-4 hover:bg-accent transition-colors flex items-center justify-center"
@@ -163,7 +173,7 @@ export function TitleBar() {
             )}
           </button>
 
-          {/* å…³é—­ */}
+          {/* 关闭 */}
           <button
             onClick={handleClose}
             className="h-full px-4 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center"
