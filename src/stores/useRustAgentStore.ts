@@ -333,10 +333,10 @@ export const useRustAgentStore = create<RustAgentState>()(
 
       // 创建新会话
       createSession: (title?: string) => {
-        const state = get();
-        // 先保存当前会话
-        state._saveCurrentSession();
-        
+        // 先保存当前会话，再基于最新 sessions 追加一个全新会话
+        get()._saveCurrentSession();
+        const sessions = get().sessions;
+
         const id = `rust-session-${Date.now()}`;
         const newSession: RustAgentSession = {
           id,
@@ -346,9 +346,9 @@ export const useRustAgentStore = create<RustAgentState>()(
           updatedAt: Date.now(),
           totalTokensUsed: 0,
         };
-        
+
         set({
-          sessions: [...state.sessions, newSession],
+          sessions: [...sessions, newSession],
           currentSessionId: id,
           messages: [],
           totalTokensUsed: 0,
@@ -362,23 +362,23 @@ export const useRustAgentStore = create<RustAgentState>()(
 
       // 切换会话
       switchSession: (id: string) => {
-        const state = get();
-        // 先保存当前会话
-        state._saveCurrentSession();
-        
-        const session = state.sessions.find(s => s.id === id);
-        if (session) {
-          set({
-            currentSessionId: id,
-            messages: session.messages,
-            totalTokensUsed: session.totalTokensUsed,
-            status: "idle",
-            error: null,
-            currentPlan: null,
-            lastIntent: null,
-            streamingContent: "",
-          });
-        }
+        // 保存当前会话，再切换到目标会话（使用最新 sessions）
+        get()._saveCurrentSession();
+        const sessions = get().sessions;
+        const session = sessions.find(s => s.id === id);
+        if (!session) return;
+
+        set({
+          sessions,
+          currentSessionId: id,
+          messages: session.messages,
+          totalTokensUsed: session.totalTokensUsed,
+          status: "idle",
+          error: null,
+          currentPlan: null,
+          lastIntent: null,
+          streamingContent: "",
+        });
       },
 
       // 删除会话
@@ -429,24 +429,24 @@ export const useRustAgentStore = create<RustAgentState>()(
 
       // 保存当前会话
       _saveCurrentSession: () => {
-        const state = get();
-        if (!state.currentSessionId) return;
-        
-        set({
-          sessions: state.sessions.map(s =>
-            s.id === state.currentSessionId
-              ? {
-                  ...s,
-                  messages: state.messages,
-                  totalTokensUsed: state.totalTokensUsed,
-                  updatedAt: Date.now(),
-                  // 根据第一条用户消息生成标题
-                  title: s.title === "新对话" && state.messages.length > 0
-                    ? state.messages.find(m => m.role === "user")?.content.slice(0, 20) + "..." || s.title
-                    : s.title,
-                }
-              : s
-          ),
+        set((state) => {
+          if (!state.currentSessionId) return state;
+
+          return {
+            sessions: state.sessions.map(s =>
+              s.id === state.currentSessionId
+                ? {
+                    ...s,
+                    messages: state.messages,
+                    totalTokensUsed: state.totalTokensUsed,
+                    updatedAt: Date.now(),
+                    title: s.title === "新对话" && state.messages.length > 0
+                      ? state.messages.find(m => m.role === "user")?.content.slice(0, 20) || s.title
+                      : s.title,
+                  }
+                : s
+            ),
+          };
         });
       },
 

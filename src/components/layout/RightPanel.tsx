@@ -346,9 +346,10 @@ export function RightPanel() {
   const { tabs, activeTabIndex } = useFileStore();
   const { 
     config,
-    clearChat,
     setConfig,
     checkFirstLoad: checkChatFirstLoad,
+    currentSessionId: chatCurrentId,
+    deleteSession: deleteChatSession,
   } = useAIStore();
   useFileStore(); // Hook needed for store subscription
   const { 
@@ -369,6 +370,9 @@ export function RightPanel() {
   const setAutoApprove = USE_RUST_AGENT ? rustAgentStore.setAutoApprove : legacyAgentStore.setAutoApprove;
   const checkAgentFirstLoad = legacyAgentStore.checkFirstLoad; // Rust Agent 暂不需要
   
+  const agentCurrentId = USE_RUST_AGENT ? rustAgentStore.currentSessionId : legacyAgentStore.currentSessionId;
+  const deleteAgentSession = USE_RUST_AGENT ? rustAgentStore.deleteSession : legacyAgentStore.deleteSession;
+
   const [showSettings, setShowSettings] = useState(false);
   const [isDraggingAI, setIsDraggingAI] = useState(false);
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
@@ -495,6 +499,18 @@ export function RightPanel() {
     return () => window.removeEventListener('lumina-drop', handleLuminaDrop);
   }, [rightPanelTab, aiPanelMode, isMainAIActive]);
 
+  const handleDeleteCurrentSession = () => {
+    if (chatMode === "agent") {
+      if (agentCurrentId) {
+        deleteAgentSession(agentCurrentId);
+      }
+    } else {
+      if (chatCurrentId) {
+        deleteChatSession(chatCurrentId);
+      }
+    }
+  };
+
   return (
     <aside 
       ref={panelRef}
@@ -602,9 +618,9 @@ export function RightPanel() {
             </div>
             <div className="flex gap-1">
               <button
-                onClick={clearChat}
+                onClick={handleDeleteCurrentSession}
                 className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                title={t.panel.clearChat}
+                title={t.conversationList.deleteConversation}
               >
                 <Trash2 size={14} />
               </button>
