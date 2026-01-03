@@ -74,33 +74,11 @@ export function ConversationList({ className }: ConversationListProps) {
 
   const handleNewConversation = () => {
     if (chatMode === "agent") {
-      // 获取当前 agent session
-      const currentSession = agentSessions.find(s => s.id === agentCurrentId);
-      // 如果当前 session 是空的，不做任何事
-      if (currentSession && currentSession.messages.length === 0) {
-        return;
-      }
-      // 找一个空的 agent session
-      const emptySession = agentSessions.find(s => s.messages.length === 0);
-      if (emptySession) {
-        // 切换到空 session
-        switchAgentSession(emptySession.id);
-      } else {
-        // 创建新 session
-        createAgentSession();
-      }
+      // 手动新建对话时直接创建新的 Agent 会话
+      createAgentSession();
     } else {
-      // Chat mode
-      const currentSession = chatSessions.find(s => s.id === chatCurrentId);
-      if (currentSession && currentSession.messages.length === 0) {
-        return;
-      }
-      const emptySession = chatSessions.find(s => s.messages.length === 0);
-      if (emptySession) {
-        switchChatSession(emptySession.id);
-      } else {
-        createChatSession();
-      }
+      // 手动新建对话时直接创建新的 Chat 会话
+      createChatSession();
     }
   };
 
