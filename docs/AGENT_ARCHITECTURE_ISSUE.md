@@ -1,5 +1,33 @@
 # Agent 架构重构计划
 
+## 实施进度
+
+| Phase | 内容 | 状态 | 完成日期 |
+|-------|------|------|----------|
+| Phase 1 | Rust 端工具审批机制 | ✅ 已完成 | 2026-01-04 |
+| Phase 2 | 前端状态迁移 | ✅ 已完成 | 2026-01-04 |
+| Phase 3 | SSE 稳定性增强 | ⏳ 待实施 | - |
+| Phase 4 | 清理旧代码 | ⏳ 待实施 | - |
+| Phase 5 | 测试验证 | ⏳ 待实施 | - |
+
+### 已完成的工作 (Phase 1 & 2)
+
+**Rust 后端:**
+- ✅ 新增 `WaitingApproval`, `LlmRequestStart/End`, `Heartbeat` 事件类型
+- ✅ 实现 `ApprovalManager` 全局单例（使用 `once_cell::Lazy`）
+- ✅ 新增 `agent_approve_tool` Tauri 命令
+- ✅ 定义 `DANGEROUS_TOOLS` 列表（edit_note, create_note, delete_note, move_note）
+- ✅ 在 `ToolRegistry` 中实现 `wait_for_approval()` 异步等待逻辑
+- ✅ 传递 `AppHandle` 和 `auto_approve` 到 `ToolRegistry`
+
+**前端:**
+- ✅ 新增 `PendingToolApproval` 类型和 `pendingTool` 状态
+- ✅ 实现 `approveTool()` / `rejectTool()` / `retryTimeout()` 方法
+- ✅ 处理 `waiting_approval`, `llm_request_start/end`, `heartbeat` 事件
+- ✅ 更新 `AgentPanel` 和 `MainAIChatShell` 使用 Rust Agent 审批功能
+
+---
+
 ## 问题概述
 
 当前项目存在 **两套 Agent 实现并存** 的问题，导致功能断裂、代码混乱、维护困难。
@@ -42,7 +70,7 @@
 │  ✅ call_stream() - 流式输出     │    │  ❌ callLLM() - 非流式          │
 │  ✅ MessageChunk 事件            │    │  ✅ 工具审批逻辑 - 已实现        │
 │  ✅ PlanUpdated 事件             │    │  ✅ 超时重试逻辑 - 已实现        │
-│  ❌ 工具审批 - 未实现            │    │                                  │
+│  ✅ 工具审批 - 已实现 ✨          │    │                                  │
 │  ❌ 超时重试 - 未实现            │    │                                  │
 └──────────────────────────────────┘    └──────────────────────────────────┘
 ```
