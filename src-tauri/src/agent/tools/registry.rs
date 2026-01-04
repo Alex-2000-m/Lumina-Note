@@ -4,23 +4,122 @@
 
 use crate::agent::types::*;
 use crate::agent::tools::fast_search::FastSearch;
+use crate::agent::commands::{ApprovalManager, ToolApprovalResponse};
 use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
 use walkdir::WalkDir;
+use tauri::{AppHandle, Emitter};
+
+/// 需要用户审批的危险工具列表
+const DANGEROUS_TOOLS: &[&str] = &[
+    "edit_note",      // 编辑笔记
+    "create_note",    // 创建笔记
+    "delete_note",    // 删除笔记
+    "move_note",      // 移动笔记
+];
 
 /// 工具注册表
 pub struct ToolRegistry {
     workspace_path: String,
+    app: Option<AppHandle>,
+    auto_approve: bool,
 }
 
 impl ToolRegistry {
     pub fn new(workspace_path: String) -> Self {
-        Self { workspace_path }
+        Self { 
+            workspace_path,
+            app: None,
+            auto_approve: false,
+        }
+    }
+    
+    /// 设置 AppHandle（用于发送事件）
+    pub fn with_app(mut self, app: AppHandle) -> Self {
+        self.app = Some(app);
+        self
+    }
+    
+    /// 设置自动审批模式
+    pub fn with_auto_approve(mut self, auto_approve: bool) -> Self {
+        self.auto_approve = auto_approve;
+        self
+    }
+    
+    /// 检查工具是否需要审批
+    fn needs_approval(&self, tool_name: &str) -> bool {
+        !self.auto_approve && DANGEROUS_TOOLS.contains(&tool_name)
+    }
+    
+    /// 等待用户审批
+    async fn wait_for_approval(&self, tool_call: &ToolCall) -> Result<bool, String> {
+        let app = self.app.as_ref()
+            .ok_or("AppHandle not set, cannot request approval")?;
+        
+        // 生成请求 ID
+        let request_id = format!("approval-{}-{}", tool_call.name, chrono::Utc::now().timestamp_millis());
+        
+        // 创建审批通道
+        let (tx, rx) = tokio::sync::oneshot::channel::<ToolApprovalResponse>();
+        
+        // 注册到全局管理器
+        ApprovalManager::global().set_approval_channel(request_id.clone(), tx).await;
+        
+        // 发送等待审批事件
+        let _ = app.emit("agent-event", AgentEvent::StatusChange {
+            status: AgentStatus::WaitingApproval,
+        });
+        let _ = app.emit("agent-event", AgentEvent::WaitingApproval {
+            tool: tool_call.clone(),
+            request_id: request_id.clone(),
+        });
+        
+        println!("[ToolRegistry] 等待用户审批: {} (request_id={})", tool_call.name, request_id);
+        
+        // 等待用户响应
+        match rx.await {
+            Ok(response) => {
+                println!("[ToolRegistry] 收到审批响应: approved={}", response.approved);
+                Ok(response.approved)
+            }
+            Err(_) => {
+                println!("[ToolRegistry] 审批通道关闭（可能是任务被中止）");
+                Err("Approval channel closed".to_string())
+            }
+        }
     }
 
     /// 执行工具
     pub async fn execute(&self, tool_call: &ToolCall) -> ToolResult {
+        // 检查是否需要审批
+        if self.needs_approval(&tool_call.name) {
+            match self.wait_for_approval(tool_call).await {
+                Ok(true) => {
+                    // 审批通过，继续执行
+                    println!("[ToolRegistry] 工具 {} 审批通过，开始执行", tool_call.name);
+                }
+                Ok(false) => {
+                    // 审批拒绝
+                    return ToolResult {
+                        tool_call_id: tool_call.id.clone(),
+                        success: false,
+                        content: String::new(),
+                        error: Some("用户拒绝了此操作".to_string()),
+                    };
+                }
+                Err(e) => {
+                    // 审批过程出错
+                    return ToolResult {
+                        tool_call_id: tool_call.id.clone(),
+                        success: false,
+                        content: String::new(),
+                        error: Some(format!("审批过程出错: {}", e)),
+                    };
+                }
+            }
+        }
+        
         let result = match tool_call.name.as_str() {
             "read_note" => self.read_note(&tool_call.params).await,
             "read_outline" => self.read_outline(&tool_call.params).await,

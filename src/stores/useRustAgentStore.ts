@@ -43,6 +43,12 @@ export interface ToolCall {
   params: Record<string, unknown>;
 }
 
+/// 等待审批的工具信息
+export interface PendingToolApproval {
+  tool: ToolCall;
+  requestId: string;
+}
+
 export interface RustAgentSession {
   id: string;
   title: string;
@@ -134,11 +140,25 @@ interface RustAgentState {
   debugEnabled: boolean;
   debugLogPath: string | null;
   
+  // 工具审批（新增）
+  pendingTool: PendingToolApproval | null;
+  
+  // LLM 请求超时检测（新增）
+  llmRequestStartTime: number | null;
+  llmRequestId: string | null;
+  
   // 操作
   startTask: (task: string, context: TaskContext) => Promise<void>;
   abort: () => Promise<void>;
   clearChat: () => void;
   setAutoApprove: (value: boolean) => void;
+  
+  // 工具审批操作（新增）
+  approveTool: () => Promise<void>;
+  rejectTool: () => Promise<void>;
+  
+  // 超时重试（新增）
+  retryTimeout: () => Promise<void>;
   
   // 调试操作
   enableDebug: (workspacePath: string) => Promise<void>;
@@ -199,6 +219,13 @@ export const useRustAgentStore = create<RustAgentState>()(
       // 调试模式初始状态
       debugEnabled: false,
       debugLogPath: null,
+      
+      // 工具审批初始状态（新增）
+      pendingTool: null,
+      
+      // LLM 请求超时检测初始状态（新增）
+      llmRequestStartTime: null,
+      llmRequestId: null,
 
       // 启动任务
       startTask: async (task: string, context: TaskContext) => {
@@ -306,6 +333,51 @@ export const useRustAgentStore = create<RustAgentState>()(
       // 设置自动审批
       setAutoApprove: (value: boolean) => {
         set({ autoApprove: value });
+      },
+      
+      // 审批工具调用（新增）
+      approveTool: async () => {
+        const { pendingTool } = get();
+        if (!pendingTool) {
+          console.warn("[RustAgent] No pending tool to approve");
+          return;
+        }
+        
+        try {
+          await invoke("agent_approve_tool", {
+            requestId: pendingTool.requestId,
+            approved: true,
+          });
+          set({ pendingTool: null });
+        } catch (e) {
+          console.error("[RustAgent] Failed to approve tool:", e);
+        }
+      },
+      
+      // 拒绝工具调用（新增）
+      rejectTool: async () => {
+        const { pendingTool } = get();
+        if (!pendingTool) {
+          console.warn("[RustAgent] No pending tool to reject");
+          return;
+        }
+        
+        try {
+          await invoke("agent_approve_tool", {
+            requestId: pendingTool.requestId,
+            approved: false,
+          });
+          set({ pendingTool: null });
+        } catch (e) {
+          console.error("[RustAgent] Failed to reject tool:", e);
+        }
+      },
+      
+      // 超时重试（新增）
+      retryTimeout: async () => {
+        // TODO: 实现超时重试逻辑
+        // 目前 Rust 端还没有实现重试机制
+        console.log("[RustAgent] Retry timeout - not implemented yet");
       },
       
       // 启用调试模式
@@ -647,6 +719,53 @@ export const useRustAgentStore = create<RustAgentState>()(
                 failedTasks: stats.failedTasks + 1,
               },
             });
+            break;
+          }
+          
+          // 新增：等待工具审批事件
+          case "waiting_approval": {
+            const { tool, request_id } = event.data as { 
+              tool: ToolCall; 
+              request_id: string;
+            };
+            console.log("[RustAgent] waiting_approval:", { tool, request_id });
+            set({
+              status: "waiting_approval",
+              pendingTool: {
+                tool,
+                requestId: request_id,
+              },
+            });
+            break;
+          }
+          
+          // 新增：LLM 请求开始事件
+          case "llm_request_start": {
+            const { request_id, timestamp } = event.data as { 
+              request_id: string; 
+              timestamp: number;
+            };
+            set({
+              llmRequestStartTime: timestamp,
+              llmRequestId: request_id,
+            });
+            break;
+          }
+          
+          // 新增：LLM 请求结束事件
+          case "llm_request_end": {
+            set({
+              llmRequestStartTime: null,
+              llmRequestId: null,
+            });
+            break;
+          }
+          
+          // 新增：心跳事件（用于连接状态监控）
+          case "heartbeat": {
+            // 可以用于更新最后心跳时间，检测连接状态
+            // 目前只是记录日志
+            console.log("[RustAgent] heartbeat received");
             break;
           }
         }

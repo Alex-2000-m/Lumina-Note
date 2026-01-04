@@ -2086,6 +2086,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "notify",
+ "once_cell",
  "rand 0.8.5",
  "rayon",
  "regex",

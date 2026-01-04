@@ -110,6 +110,7 @@ fn main() {
             // Agent commands
             agent::agent_start_task,
             agent::agent_abort,
+            agent::agent_approve_tool,
             agent::agent_get_status,
             agent::agent_continue_with_answer,
             // Agent debug commands

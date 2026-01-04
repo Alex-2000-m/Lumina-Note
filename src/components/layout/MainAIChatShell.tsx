@@ -164,15 +164,15 @@ export function MainAIChatShell() {
     createSession: createAgentSession,
     switchSession: switchAgentSession,
     deleteSession: deleteAgentSession,
-    pendingTool,
-    approve,
-    reject,
+    pendingTool: legacyPendingTool,
+    approve: legacyApprove,
+    reject: legacyReject,
     startTask: legacyStartTask,
     abort: legacyAgentAbort,
     checkFirstLoad: checkAgentFirstLoad,
     lastIntent,
-    llmRequestStartTime,
-    retryTimeout,
+    llmRequestStartTime: legacyLlmRequestStartTime,
+    retryTimeout: legacyRetryTimeout,
   } = useAgentStore();
 
   // 使用 Rust Agent（设为 true 启用）
@@ -181,6 +181,21 @@ export function MainAIChatShell() {
   // 根据开关选择使用哪个 Agent
   const agentStatus = USE_RUST_AGENT ? rustAgentStatus : legacyAgentStatus;
   const agentAbort = USE_RUST_AGENT ? rustAbort : legacyAgentAbort;
+  
+  // 工具审批功能 - 现在 Rust Agent 也支持了
+  const {
+    pendingTool: rustPendingTool,
+    approveTool: rustApproveTool,
+    rejectTool: rustRejectTool,
+    llmRequestStartTime: rustLlmRequestStartTime,
+    retryTimeout: rustRetryTimeout,
+  } = useRustAgentStore();
+  
+  const pendingTool = USE_RUST_AGENT ? rustPendingTool?.tool : legacyPendingTool;
+  const approve = USE_RUST_AGENT ? rustApproveTool : legacyApprove;
+  const reject = USE_RUST_AGENT ? rustRejectTool : legacyReject;
+  const llmRequestStartTime = USE_RUST_AGENT ? rustLlmRequestStartTime : legacyLlmRequestStartTime;
+  const retryTimeout = USE_RUST_AGENT ? rustRetryTimeout : legacyRetryTimeout;
   
   // 转换 Rust Agent 消息格式以兼容 UI
   const agentMessages = useMemo(() => {

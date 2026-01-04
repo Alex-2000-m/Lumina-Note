@@ -328,7 +328,9 @@ async fn agent_worker_node(
     use crate::agent::debug_log as dbg;
     
     let tools = get_tools_for_agent(agent_name);
-    let tool_registry = ToolRegistry::new(state.workspace_path.clone());
+    let tool_registry = ToolRegistry::new(state.workspace_path.clone())
+        .with_app(app.clone())
+        .with_auto_approve(state.auto_approve);
 
     // ========== 使用 ChatChunks 分层构建消息 ==========
     

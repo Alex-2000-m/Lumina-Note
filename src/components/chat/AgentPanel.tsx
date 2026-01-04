@@ -57,8 +57,13 @@ export function AgentPanel() {
   const clearChat = USE_RUST_AGENT ? rustStore.clearChat : legacyStore.clearChat;
   const abort = USE_RUST_AGENT ? rustStore.abort : legacyStore.abort;
   
-  // Rust Agent 暂不支持的功能，使用旧 store 的
-  const { pendingTool, approve, reject, retry, llmRequestStartTime, retryTimeout } = legacyStore;
+  // 工具审批功能 - 现在 Rust Agent 也支持了
+  const pendingTool = USE_RUST_AGENT ? rustStore.pendingTool?.tool : legacyStore.pendingTool;
+  const approve = USE_RUST_AGENT ? rustStore.approveTool : legacyStore.approve;
+  const reject = USE_RUST_AGENT ? rustStore.rejectTool : legacyStore.reject;
+  const retry = USE_RUST_AGENT ? (() => {}) : legacyStore.retry; // Rust Agent 暂不支持 retry
+  const llmRequestStartTime = USE_RUST_AGENT ? rustStore.llmRequestStartTime : legacyStore.llmRequestStartTime;
+  const retryTimeout = USE_RUST_AGENT ? rustStore.retryTimeout : legacyStore.retryTimeout;
   
   // startTask 需要不同的参数格式
   const startTask = USE_RUST_AGENT 

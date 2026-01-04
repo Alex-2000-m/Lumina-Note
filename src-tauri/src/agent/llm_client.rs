@@ -142,7 +142,7 @@ impl LlmClient {
         }).collect()
     }
 
-    /// 非流式调用
+    /// 非流式调用（带重试机制）
     pub async fn call(
         &self,
         messages: &[Message],
@@ -169,31 +169,69 @@ impl LlmClient {
         println!("[LlmClient] 📤 发送请求到: {}", url);
         println!("[LlmClient] 📤 模型: {}, 消息数: {}, 工具: {}", 
             self.config.model, chat_messages.len(), has_tools);
-        let start_time = std::time::Instant::now();
         
-        let mut req = self.client.post(&url);
-        for (key, value) in headers {
-            req = req.header(&key, &value);
+        // 重试机制
+        let max_retries = 2;
+        let mut last_error = String::new();
+        
+        for attempt in 0..=max_retries {
+            if attempt > 0 {
+                // 重试前等待，指数退避
+                let wait_secs = 1u64 << (attempt - 1); // 1s, 2s
+                println!("[LlmClient] ⏳ 重试 {} (等待 {}s)，上次错误: {}", attempt, wait_secs, last_error);
+                tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
+            }
+            
+            let start_time = std::time::Instant::now();
+            
+            // 每次重试都重新构建请求（避免连接复用问题）
+            let mut req = self.client.post(&url);
+            for (key, value) in &headers {
+                req = req.header(key, value);
+            }
+            req = req.json(&body);
+            
+            match req.send().await {
+                Ok(response) => {
+                    println!("[LlmClient] ✅ 收到响应，耗时: {:?}", start_time.elapsed());
+                    
+                    if !response.status().is_success() {
+                        let status = response.status();
+                        let text = response.text().await.unwrap_or_default();
+                        last_error = format!("HTTP {}: {}", status, text);
+                        
+                        // 5xx 错误可以重试，4xx 错误不重试
+                        if status.is_server_error() {
+                            continue;
+                        }
+                        return Err(last_error);
+                    }
+                    
+                    let json: Value = match response.json().await {
+                        Ok(j) => j,
+                        Err(e) => {
+                            last_error = format!("Failed to parse response: {}", e);
+                            continue;
+                        }
+                    };
+                    
+                    // 成功，解析响应
+                    return self.parse_llm_response(json);
+                }
+                Err(e) => {
+                    println!("[LlmClient] ❌ 请求失败: {}", e);
+                    last_error = format!("Request failed: {}", e);
+                    // 继续重试
+                }
+            }
         }
-        req = req.json(&body);
         
-        let response = req.send().await
-            .map_err(|e| {
-                println!("[LlmClient] ❌ 请求失败: {}", e);
-                format!("Request failed: {}", e)
-            })?;
-        
-        println!("[LlmClient] ✅ 收到响应，耗时: {:?}", start_time.elapsed());
-        
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, text));
-        }
-        
-        let json: Value = response.json().await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-        
+        // 所有重试都失败
+        Err(last_error)
+    }
+    
+    /// 解析 LLM 响应
+    fn parse_llm_response(&self, json: Value) -> Result<LlmResponse, String> {
         // 提取 token 使用量
         let usage = &json["usage"];
         let prompt_tokens = usage["prompt_tokens"].as_u64().unwrap_or(0) as usize;
