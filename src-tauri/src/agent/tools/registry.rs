@@ -137,7 +137,7 @@ impl ToolRegistry {
             "add_database_row" => self.add_database_row(&tool_call.params).await,
             "get_backlinks" => self.get_backlinks(&tool_call.params).await,
             "ask_user" => self.ask_user(&tool_call.params).await,
-            "attempt_completion" => self.attempt_completion(&tool_call.params).await,
+            // attempt_completion 已移除 - 任务完成由"无工具调用"判断
             // update_plan 在 agent_worker_node 中特殊处理，这里只返回确认
             "update_plan" => Ok("计划已更新".to_string()),
             _ => Err(format!("Unknown tool: {}", tool_call.name)),
@@ -644,14 +644,8 @@ impl ToolRegistry {
         Ok(format!("[WAITING_FOR_USER] {}", question))
     }
 
-    /// 完成任务
-    async fn attempt_completion(&self, params: &HashMap<String, serde_json::Value>) -> Result<String, String> {
-        let result = params.get("result")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing 'result' parameter")?;
-
-        Ok(format!("[TASK_COMPLETED] {}", result))
-    }
+    // attempt_completion 函数已移除
+    // 任务完成由 LLM 停止调用工具来判断
 
     /// Grep 搜索（正则表达式搜索）
     async fn grep_search(&self, params: &HashMap<String, serde_json::Value>) -> Result<String, String> {

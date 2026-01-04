@@ -8,7 +8,94 @@
 | Phase 2 | 前端状态迁移 | ✅ 已完成 | 2026-01-04 |
 | Phase 3 | SSE 稳定性增强 | ✅ 已完成 | 2026-01-04 |
 | Phase 4 | 清理旧代码 | ✅ 已完成 | 2026-01-04 |
-| Phase 5 | 测试验证 | ⏳ 待实施 | - |
+| Phase 5 | 移除 attempt_completion，统一流式输出 | ⏳ 进行中 | - |
+
+---
+
+## Phase 5: 移除 attempt_completion，统一流式输出
+
+### 问题描述
+
+测试发现：
+- ✅ 简单聊天（如"你好"）有流式输出效果
+- ❌ 工具调用场景（如编辑笔记）没有流式输出
+
+**根本原因**：当 `attempt_completion` 工具被调用时，`agent_worker_node` 直接设置 `state.final_result` 并返回，绕过了 `reporter_node`（负责流式输出）。
+
+```
+当前流程（attempt_completion 场景）：
+User → Coordinator → Agent Worker (工具循环) → attempt_completion → 直接结束 ❌
+                                                    ↓
+                                              非流式返回
+
+期望流程：
+User → Coordinator → Agent Worker (工具循环) → Reporter → 流式输出 → 结束 ✅
+```
+
+### 设计方案
+
+**核心思想**：移除 `attempt_completion` 工具，让任务在 LLM 停止调用工具时自然完成，所有完成都经过 `reporter_node` 进行流式汇总。
+
+#### 1. 修改 `agent_worker_node` 逻辑
+
+**文件**: `src-tauri/src/agent/graph/nodes.rs`
+
+```rust
+// 当前逻辑（需要移除）：
+if tool_call.name == "attempt_completion" {
+    if let Some(result_text) = tool_call.params.get("result")... {
+        state.final_result = Some(result_text.to_string());
+        return Ok(NodeResult { state, next_node: None }); // 直接结束，绕过 reporter
+    }
+}
+
+// 新逻辑：
+// 1. 移除 attempt_completion 的特殊处理
+// 2. 当 LLM 响应不包含任何工具调用时，视为任务完成
+// 3. 将控制权交给 reporter_node 进行流式汇总
+```
+
+**判断任务完成的条件**：
+- FC 模式：`response.tool_calls` 为空或 `None`
+- XML 模式：`parse_tool_calls()` 返回空列表
+
+#### 2. 移除 `attempt_completion` 工具定义
+
+**文件**: `src-tauri/src/agent/tools/definitions.rs`
+
+- 从 `get_all_tool_definitions()` 移除 `attempt_completion_definition()`
+- 从各 Agent 的工具列表中移除 `attempt_completion`
+- 删除 `attempt_completion_definition()` 函数
+
+#### 3. 更新 Agent 提示词
+
+**文件**: `src-tauri/src/agent/graph/nodes.rs` - `build_agent_prompt()`
+
+移除提示词中对 `attempt_completion` 的引用，改为：
+- "完成任务后停止调用工具，系统会自动汇总结果"
+- "不需要显式调用完成工具"
+
+#### 4. 修改 `reporter_node` 
+
+确保 `reporter_node` 能正确处理工具执行后的汇总：
+- 从 `state.observations` 获取工具执行历史
+- 生成流式的任务完成汇总
+
+### 代码变更清单
+
+| 文件 | 变更 |
+|------|------|
+| `src-tauri/src/agent/graph/nodes.rs` | 移除 `attempt_completion` 特殊处理，修改完成判断逻辑 |
+| `src-tauri/src/agent/tools/definitions.rs` | 移除 `attempt_completion` 工具定义 |
+| `src-tauri/src/agent/tools/registry.rs` | 移除 `attempt_completion` 执行逻辑（如有） |
+
+### 预期效果
+
+修改后，所有场景都将有流式输出：
+- 简单聊天 → Coordinator → Reporter（流式）
+- 工具调用 → Coordinator → Agent Worker → Reporter（流式汇总）
+
+---
 
 ### 已完成的工作 (Phase 1 ~ 4)
 
@@ -33,6 +120,8 @@
 - ✅ 新增 `useHeartbeatMonitor` Hook（心跳监控）
 - ✅ 移除所有组件对 `useAgentStore` 的引用
 - ✅ 移除 `USE_RUST_AGENT` 开关，直接使用 Rust Agent
+- ✅ 重构 `StreamingMessage` 组件，统一 Agent/Chat 流式输出
+- ✅ 修复 `AgentMessageRenderer` 的 key 重复问题
 
 **待删除的旧代码（可选）:**
 以下文件不再被引用，可以安全删除：

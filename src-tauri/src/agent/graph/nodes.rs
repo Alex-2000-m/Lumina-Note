@@ -475,8 +475,6 @@ async fn agent_worker_node(
                 _ => break, // 没有工具调用，任务完成
             }
         };
-        let mut should_complete = false;
-        
         for tool_call in tool_calls {
             // 发送工具调用事件
             let _ = app.emit("agent-event", AgentEvent::ToolCall {
@@ -568,51 +566,8 @@ async fn agent_worker_node(
                 }
             }
 
-            // 检查是否完成
-            if tool_call.name == "attempt_completion" {
-                // 检查计划是否全部完成 (Windsurf 风格)
-                let all_steps_completed = state.current_plan.as_ref()
-                    .map(|plan| plan.steps.iter().all(|s| s.status == PlanStepStatus::Completed))
-                    .unwrap_or(true); // 没有计划则视为完成
-                
-                let incomplete_count = state.current_plan.as_ref()
-                    .map(|plan| plan.steps.iter().filter(|s| s.status != PlanStepStatus::Completed).count())
-                    .unwrap_or(0);
-                
-                if !all_steps_completed && iteration < max_iterations - 1 {
-                    // 还有未完成的步骤，且未达最大次数，拒绝结束
-                    let pending: Vec<String> = state.current_plan.as_ref()
-                        .map(|plan| plan.steps.iter()
-                            .enumerate()
-                            .filter(|(_, s)| s.status != PlanStepStatus::Completed)
-                            .map(|(i, s)| format!("{}. {}", i + 1, s.step))
-                            .collect())
-                        .unwrap_or_default();
-                    
-                    messages.push(Message {
-                        role: MessageRole::User,
-                        content: format!(
-                            "[系统提醒] ⚠️ 拒绝结束！计划中还有 {} 个步骤未完成：\n{}\n\n请调用 update_plan 更新步骤状态后再调用 attempt_completion。",
-                            incomplete_count,
-                            pending.join("\n")
-                        ),
-                        name: None,
-                        tool_call_id: None,
-                    });
-                    // 跳过后续处理，继续循环
-                    continue;
-                }
-                
-                if let Some(result_text) = tool_call.params.get("result").and_then(|v| v.as_str()) {
-                    state.final_result = Some(result_text.to_string());
-                    state.goto = "end".to_string();
-                    return Ok(NodeResult {
-                        state,
-                        next_node: None, // 结束
-                    });
-                }
-                should_complete = true;
-            }
+            // 检查是否完成 - 不再特殊处理 attempt_completion
+            // 任务完成由"无工具调用"来判断，而非显式调用 attempt_completion
 
             // 添加到观察
             let observation = format!(
@@ -646,9 +601,7 @@ async fn agent_worker_node(
             }
         }
         
-        if should_complete {
-            break;
-        }
+        // 工具调用循环继续，直到 LLM 不再返回工具调用
     }
 
     // 循环结束，发送最终计划状态
@@ -895,7 +848,8 @@ fn parse_tool_calls(response: &str) -> Option<Vec<ToolCall>> {
         // 数据库
         "query_database", "add_database_row",
         // 交互
-        "ask_user", "attempt_completion",
+        "ask_user",
+        // attempt_completion 已移除
     ];
     
     for name in &tool_names {
@@ -975,13 +929,13 @@ fn build_agent_prompt(agent_name: &str, workspace: &str, context: &str, supports
         _ => "你是 Lumina 智能笔记助手。",
     };
 
-    // Windsurf 风格：单一 update_plan 工具
+    // Windsurf 风格：单一 update_plan 工具，移除 attempt_completion
     let tools_info = match agent_name {
-        "editor" => "update_plan, read_note, edit_note, search_notes, grep_search, semantic_search, attempt_completion",
-        "researcher" => "update_plan, read_note, list_notes, search_notes, grep_search, semantic_search, get_backlinks, attempt_completion",
-        "writer" => "update_plan, read_note, create_note, edit_note, list_notes, search_notes, attempt_completion",
-        "organizer" => "update_plan, list_notes, move_note, delete_note, create_note, read_note, attempt_completion",
-        _ => "update_plan, read_note, edit_note, create_note, list_notes, search_notes, attempt_completion",
+        "editor" => "update_plan, read_note, edit_note, search_notes, grep_search, semantic_search",
+        "researcher" => "update_plan, read_note, list_notes, search_notes, grep_search, semantic_search, get_backlinks",
+        "writer" => "update_plan, read_note, create_note, edit_note, list_notes, search_notes",
+        "organizer" => "update_plan, list_notes, move_note, delete_note, create_note, read_note",
+        _ => "update_plan, read_note, edit_note, create_note, list_notes, search_notes",
     };
 
     // FC 模式：不需要 XML 格式教学，工具调用由 API 层处理
@@ -995,7 +949,7 @@ fn build_agent_prompt(agent_name: &str, workspace: &str, context: &str, supports
 总体原则：
 - 只要任务可能影响笔记文件、目录结构或需要读取现有内容，就应该调用相应工具。
 - 即使仅凭思考也能回答，如果使用工具能让结果更完整，也应偏向使用工具。
-- 只有在任务**明确与笔记系统无关**时，才可以只用 attempt_completion 直接回答。
+- 只有在任务**明确与笔记系统无关**时，才可以不调用工具直接回答。
 
 ✅ **可用工具**：{}"#, tools_info)
     } else {
@@ -1007,7 +961,7 @@ fn build_agent_prompt(agent_name: &str, workspace: &str, context: &str, supports
 总体原则：
 - 只要任务可能影响笔记文件、目录结构、数据库或需要读取现有内容，就应该调用相应工具。
 - 即使仅凭思考也能回答，如果使用工具能让结果更完整、更可复用（例如写入笔记文件），也应偏向使用工具。
-- 只有在任务**明确与笔记系统无关**，且不需要保存或读取任何文件时，才可以只用 attempt_completion 直接回答。
+- 只有在任务**明确与笔记系统无关**，且不需要保存或读取任何文件时，才可以不调用工具直接回答。
 
 # 工具调用格式
 
@@ -1077,9 +1031,9 @@ RULES
 # 计划触发判断（重要！）
 
 **简单任务（不创建计划，直接执行）**：
-- 单纯的搜索/查找任务 → 直接 fast_search/search_notes → attempt_completion
-- 读取单个文件 → 直接 read_note → attempt_completion
-- 简单问答 → 直接 attempt_completion
+- 单纯的搜索/查找任务 → 直接 fast_search/search_notes → 完成
+- 读取单个文件 → 直接 read_note → 完成
+- 简单问答 → 直接回答（不调用工具）
 - 预计 1-2 步就能完成的任务
 
 **复杂任务（需要创建计划）**：
@@ -1107,7 +1061,7 @@ RULES
 
 # 执行规则
 
-1. **简单任务直接执行**，不调用 update_plan，完成后直接 attempt_completion
+1. **简单任务直接执行**，不调用 update_plan，完成后停止调用工具即可
 2. **复杂任务先创建简洁计划**（2-4 步），每次只有一个步骤 in_progress
 3. 所有文件路径必须相对于笔记库根目录
 4. **修改文件前必须先用 read_note 读取确认当前内容**
@@ -1124,7 +1078,7 @@ RULES
 
 OBJECTIVE
 
-完成用户的任务。使用工具时要精确、高效。任务完成后使用 attempt_completion 报告结果。
+完成用户的任务。使用工具时要精确、高效。任务完成后停止调用工具，系统会自动汇总结果。
 "#,
         role_desc = role_desc,
         workspace = workspace,
